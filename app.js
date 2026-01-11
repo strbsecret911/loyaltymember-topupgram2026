@@ -42,8 +42,7 @@ function openModal(title, message, { okText="OK", cancelText=null, onOk=null, on
 
   wrap.addEventListener("click",(e)=>{ if(e.target === wrap) close(); });
 
-  const okBtn = wrap.querySelector("#m_ok");
-  okBtn.onclick = async ()=>{
+  wrap.querySelector("#m_ok").onclick = async ()=>{
     try{ if(onOk) await onOk(); }
     finally{ close(); }
   };
@@ -94,167 +93,68 @@ function makeMemberCode(telegramId){
 }
 
 function makeVoucher5(){
-  // 5 digit numeric
   let out = "";
   for(let i=0;i<5;i++) out += String(Math.floor(Math.random()*10));
   return out;
 }
 
+function memberStatus(m){
+  const exp = m.expires_at?.toDate ? m.expires_at.toDate() : (m.expires_at ? new Date(m.expires_at) : null);
+  if(!exp) return { label:"-", expired:false, exp:null };
+  const expired = (new Date() > exp);
+  return { label: expired ? "KEDALUWARSA" : "AKTIF", expired, exp };
+}
+
 /* =========================
-   PUBLIC HOME (search + register form -> request)
+   PUBLIC: SEARCH ONLY
 ========================= */
 
 function pageHome(){
   card(`
-    <div class="tabs">
-      <button class="tab ${tabIs("search")?"active":""}" id="t_search">Cari Membership</button>
-      <button class="tab ${tabIs("register")?"active":""}" id="t_register">Daftar Membership</button>
-    </div>
-    <div id="tab"></div>
+    <h2 style="margin:0 0 6px;">Cari Membership</h2>
+    <div class="small">Masukkan <b>Telegram ID</b> (angka) atau <b>Kode Member</b>.</div>
+
+    <label>Kata Kunci</label>
+    <input id="key" placeholder="contoh: 123456789 atau ${MEMBER_CODE_PREFIX}123456789" />
+
+    <div id="msg"></div>
+    <button class="btn" id="btn">Cari</button>
+
+    <div id="result" style="margin-top:12px;"></div>
+
     <div class="small" style="margin-top:10px;">Admin panel: buka URL dengan <b>#/admin</b></div>
   `, true);
 
-  t_search.onclick = ()=>{ setTab("search"); render(); };
-  t_register.onclick = ()=>{ setTab("register"); render(); };
+  // Enter = search
+  key.addEventListener("keydown",(e)=>{
+    if(e.key === "Enter") btn.click();
+  });
 
-  if(tabIs("register")) return renderRegisterTab();
-  return renderSearchTab();
-}
+  btn.onclick = async ()=>{
+    msg.innerHTML = "";
+    result.innerHTML = "";
 
-function tabIs(name){
-  return (localStorage.getItem("tpg_tab") || "search") === name;
-}
-function setTab(name){
-  localStorage.setItem("tpg_tab", name);
-}
-
-function setInner(html){
-  document.getElementById("tab").innerHTML = html;
-}
-
-/* --- Register Tab: creates member_requests --- */
-function renderRegisterTab(){
-  setInner(`
-    <h2 style="margin:12px 0 6px;">Form Daftar Membership</h2>
-    <div class="small">Isi data, lalu pengajuan masuk ke admin untuk diproses.</div>
-
-    <label>Nama</label>
-    <input id="r_name" placeholder="contoh: Dini" />
-
-    <label>Username Telegram</label>
-    <input id="r_user" placeholder="contoh: topupgram" />
-    <div class="helper">Isi tanpa tanda <b>@</b>.</div>
-
-    <div id="r_msg"></div>
-
-    <button class="btn" id="r_send">Kirim Pengajuan</button>
-  `);
-
-  r_send.onclick = async ()=>{
-    r_msg.innerHTML = "";
-    const name = String(r_name.value||"").trim();
-    const username = String(r_user.value||"").trim().replace(/^@/,"").toLowerCase();
-
-    if(name.length < 2){
-      r_msg.innerHTML = `<div class="error">Nama minimal 2 karakter.</div>`;
-      return;
-    }
-    if(!/^[a-zA-Z0-9_]{5,32}$/.test(username)){
-      r_msg.innerHTML = `<div class="error">Username Telegram tidak valid (5–32, huruf/angka/_).</div>`;
+    const q = String(key.value||"").trim();
+    if(!q){
+      openModal("Info","Masukkan Telegram ID atau Kode Member.",{okText:"OK"});
       return;
     }
 
-    const btn = r_send;
-    btn.disabled = true;
-    btn.textContent = "Mengirim...";
-
     try{
-      await addDoc(collection(db,"member_requests"), {
-        name,
-        telegram_username: username,
-        status: "PENDING",
-        created_at: serverTimestamp()
-      });
+      let m = null;
 
-      openModal(
-        "Pengajuan Terkirim",
-        "Pengajuan Anda berstatus PENDING.\nMohon tunggu verifikasi admin (estimasi 5–30 menit, maksimal 1×24 jam).",
-        { okText:"OK" }
-      );
-
-      // balik ke tab search
-      setTab("search");
-      render();
-    }catch(e){
-      r_msg.innerHTML = `<div class="error">${escapeHtml(e?.message || e)}</div>`;
-    }finally{
-      btn.disabled = false;
-      btn.textContent = "Kirim Pengajuan";
-    }
-  };
-}
-
-/* --- Search Tab --- */
-function renderSearchTab(){
-  setInner(`
-    <h2 style="margin:12px 0 6px;">Cari Membership</h2>
-    <div class="small">Cari dengan Telegram ID (disarankan), Nama (exact), atau Kode Member (exact).</div>
-
-    <label>Tipe Pencarian</label>
-    <select id="s_type">
-      <option value="telegram">Telegram ID</option>
-      <option value="code">Kode Member</option>
-      <option value="name">Nama (exact)</option>
-    </select>
-
-    <label>Kata Kunci</label>
-    <input id="s_key" placeholder="contoh: 123456789" />
-
-    <div id="s_msg"></div>
-    <button class="btn" id="s_btn">Cari</button>
-
-    <div id="s_result" style="margin-top:12px;"></div>
-  `);
-
-  s_type.onchange = ()=>{
-    if(s_type.value==="telegram") s_key.placeholder = "contoh: 123456789";
-    if(s_type.value==="code") s_key.placeholder = `contoh: ${MEMBER_CODE_PREFIX}123456789`;
-    if(s_type.value==="name") s_key.placeholder = "contoh: Dini";
-  };
-
-  s_btn.onclick = async ()=>{
-    s_msg.innerHTML = "";
-    s_result.innerHTML = "";
-
-    const type = s_type.value;
-    const key = String(s_key.value||"").trim();
-
-    try{
-      if(type==="telegram"){
-        if(!isValidTelegramId(key)) throw new Error("Telegram ID tidak valid.");
-        const m = await getMemberByTelegramId(key);
-        if(!m) throw new Error("Data member tidak ditemukan.");
-        await renderMemberPublic(m);
-        return;
+      // Auto detect: angka = telegram id, selain itu = member code
+      if(isValidTelegramId(q)){
+        m = await getMemberByTelegramId(q);
+      }else{
+        m = await getMemberByCode(q);
       }
 
-      if(type==="code"){
-        if(!key) throw new Error("Kode member wajib diisi.");
-        const m = await getMemberByCode(key);
-        if(!m) throw new Error("Data member tidak ditemukan.");
-        await renderMemberPublic(m);
-        return;
-      }
+      if(!m) throw new Error("Data member tidak ditemukan.");
 
-      if(type==="name"){
-        if(key.length < 2) throw new Error("Nama minimal 2 karakter.");
-        const ms = await getMembersByName(key);
-        if(ms.length===0) throw new Error("Data member tidak ditemukan.");
-        // tampilkan list jika lebih dari 1
-        s_result.innerHTML = ms.map(m => memberCardPublic(m, { listMode:true })).join("");
-        wirePublicListButtons();
-        return;
-      }
+      result.innerHTML = memberCardPublic(m);
+      wirePublicRedeemButtons();
+
     }catch(e){
       openModal("Info", String(e?.message || e), { okText:"OK" });
     }
@@ -268,40 +168,20 @@ async function getMemberByTelegramId(telegramId){
 }
 
 async function getMemberByCode(code){
-  // single-field index (automatic) => aman
+  // single-field index (auto) => aman
   const qy = query(collection(db,"members"), where("member_code","==", code), limit(1));
   const snap = await getDocs(qy);
   if(snap.empty) return null;
   return snap.docs[0].data();
 }
 
-async function getMembersByName(name){
-  const qy = query(collection(db,"members"), where("name","==", name), limit(10));
-  const snap = await getDocs(qy);
-  if(snap.empty) return [];
-  return snap.docs.map(d=>d.data());
-}
-
-function memberStatus(m){
-  const exp = m.expires_at?.toDate ? m.expires_at.toDate() : (m.expires_at ? new Date(m.expires_at) : null);
-  if(!exp) return { label:"-", expired:false, exp:null };
-  const expired = (new Date() > exp);
-  return { label: expired ? "KEDALUWARSA" : "AKTIF", expired, exp };
-}
-
-async function renderMemberPublic(m){
-  const box = document.getElementById("s_result");
-  box.innerHTML = memberCardPublic(m);
-  wirePublicListButtons();
-}
-
-function memberCardPublic(m, { listMode=false } = {}){
+function memberCardPublic(m){
   const points = Number(m.points_balance||0);
   const pot = Math.floor(points/100)*1000;
   const st = memberStatus(m);
 
   return `
-    <div class="card ${listMode ? "" : "accent"}">
+    <div class="card accent">
       <div><b>Nama:</b> ${escapeHtml(m.name || "-")}</div>
       <div><b>Telegram ID:</b> ${escapeHtml(m.telegram_id || "-")}</div>
       <div><b>Kode Member:</b> ${escapeHtml(m.member_code || "-")}</div>
@@ -314,16 +194,20 @@ function memberCardPublic(m, { listMode=false } = {}){
 
       <div class="small"><b>Redeem (butuh PIN)</b> • PIN = 4 digit terakhir Telegram ID</div>
       <div class="row">
-        <button class="btn secondary" data-redeem="100" data-tid="${escapeHtml(m.telegram_id)}">100</button>
-        <button class="btn secondary" data-redeem="200" data-tid="${escapeHtml(m.telegram_id)}">200</button>
-        <button class="btn secondary" data-redeem="300" data-tid="${escapeHtml(m.telegram_id)}">300</button>
+        <button class="btn secondary" data-redeem="100" data-tid="${escapeHtml(m.telegram_id)}">Redeem 100</button>
+        <button class="btn secondary" data-redeem="200" data-tid="${escapeHtml(m.telegram_id)}">Redeem 200</button>
       </div>
-      <div class="small" style="margin-top:6px;">Kamu akan dapat kode voucher 5 digit setelah berhasil.</div>
+      <div class="row">
+        <button class="btn secondary" data-redeem="300" data-tid="${escapeHtml(m.telegram_id)}">Redeem 300</button>
+        <button class="btn secondary" id="recheck">Cari Lagi</button>
+      </div>
     </div>
   `;
 }
 
-function wirePublicListButtons(){
+function wirePublicRedeemButtons(){
+  document.getElementById("recheck").onclick = ()=>{ location.hash="#/"; render(); };
+
   document.querySelectorAll("button[data-redeem]").forEach(btn=>{
     btn.onclick = ()=> publicRedeem(btn.getAttribute("data-tid"), Number(btn.getAttribute("data-redeem")));
   });
@@ -340,28 +224,24 @@ async function publicRedeem(telegramId, pointsToUse){
   const current = Number(m.points_balance||0);
   const discount = (pointsToUse/100)*1000;
 
-  // modal input PIN
-  const html = `
-    <label>Masukkan PIN</label>
-    <input id="pin_in" inputmode="numeric" placeholder="contoh: ${expectedPin}" />
-    <div class="helper">PIN = 4 digit terakhir Telegram ID</div>
-  `;
-
+  // Step 1: confirm redeem
   openModal(
-    "Konfirmasi Redeem",
-    `Redeem ${pointsToUse} poin untuk Rp${discount.toLocaleString("id-ID")}?\n\nMasukkan PIN dulu.`,
+    "Konfirmasi",
+    `Redeem ${pointsToUse} poin untuk Rp${discount.toLocaleString("id-ID")}?\nPoin akan berkurang.`,
     {
-      okText: "Lanjut",
-      cancelText: "Batal",
+      okText:"Lanjut",
+      cancelText:"Batal",
       onOk: async ()=>{
-        // inject small input modal second step
+        // Step 2: ask PIN
         const wrap = document.createElement("div");
         wrap.className = "modal-backdrop";
         wrap.innerHTML = `
           <div class="modal">
             <div class="m-body">
               <h3>Masukkan PIN</h3>
-              ${html}
+              <p>PIN = 4 digit terakhir Telegram ID</p>
+              <label>PIN</label>
+              <input id="pin_in" inputmode="numeric" placeholder="contoh: ${expectedPin}" />
               <div id="pin_err" class="error"></div>
             </div>
             <div class="m-actions">
@@ -395,51 +275,40 @@ async function publicRedeem(telegramId, pointsToUse){
             return;
           }
 
-          // confirm final
           close();
-          openModal(
-            "Konfirmasi",
-            `Redeem ${pointsToUse} poin untuk Rp${discount.toLocaleString("id-ID")}?\nPoin akan berkurang.`,
-            {
-              okText:"Ya, Redeem",
-              cancelText:"Batal",
-              onOk: async ()=>{
-                // Deduct points (public allowed by rules)
-                const next = Math.max(0, current - pointsToUse);
-                await updateDoc(doc(db,"members", telegramId), {
-                  points_balance: next,
-                  last_redeemed_at: serverTimestamp()
-                });
 
-                // Create redeem log (public allowed by rules)
-                const voucher = makeVoucher5();
-                await addDoc(collection(db,"redeem_logs"), {
-                  telegram_id: telegramId,
-                  voucher_code: voucher,
-                  points_used: pointsToUse,
-                  discount: discount,
-                  created_at: serverTimestamp()
-                });
+          // Deduct points (public allowed by rules)
+          const next = Math.max(0, current - pointsToUse);
+          await updateDoc(doc(db,"members", telegramId), {
+            points_balance: next,
+            last_redeemed_at: serverTimestamp()
+          });
 
-                // Show voucher + copy
-                const message = `Kode Voucher: ${voucher}\n\nGunakan kode ini saat order.`;
-                openModal("Redeem Berhasil", message, {
-                  okText:"Salin Kode",
-                  onOk: async ()=>{
-                    try{
-                      await navigator.clipboard.writeText(voucher);
-                      openModal("Berhasil", "Kode voucher sudah disalin.", { okText:"OK" });
-                    }catch{
-                      openModal("Info", `Gagal salin otomatis. Salin manual: ${voucher}`, { okText:"OK" });
-                    }
-                  }
-                });
+          // Create redeem log (public allowed by rules)
+          const voucher = makeVoucher5();
+          await addDoc(collection(db,"redeem_logs"), {
+            telegram_id: telegramId,
+            voucher_code: voucher,
+            points_used: pointsToUse,
+            discount: discount,
+            created_at: serverTimestamp()
+          });
 
-                // refresh result if currently showing
-                setTimeout(()=> render(), 300);
+          // Show voucher + copy
+          openModal("Redeem Berhasil", `Kode Voucher: ${voucher}\n\nGunakan kode ini saat order.`, {
+            okText:"Salin Kode",
+            onOk: async ()=>{
+              try{
+                await navigator.clipboard.writeText(voucher);
+                openModal("Berhasil", "Kode voucher sudah disalin.", { okText:"OK" });
+              }catch{
+                openModal("Info", `Gagal salin otomatis. Salin manual: ${voucher}`, { okText:"OK" });
               }
             }
-          );
+          });
+
+          // refresh card
+          setTimeout(()=> render(), 300);
         };
       }
     }
@@ -485,7 +354,6 @@ function pageAdmin(){
       <div class="tabs">
         <button class="tab active" id="t_add">Tambah Member</button>
         <button class="tab" id="t_points">Poin</button>
-        <button class="tab" id="t_find">Cari</button>
       </div>
 
       <div id="tab"></div>
@@ -495,7 +363,6 @@ function pageAdmin(){
 
     t_add.onclick = ()=>{ setAdminTab("add"); adminTabs(); };
     t_points.onclick = ()=>{ setAdminTab("points"); adminTabs(); };
-    t_find.onclick = ()=>{ setAdminTab("find"); adminTabs(); };
 
     adminTabs();
   }
@@ -507,11 +374,9 @@ function pageAdmin(){
     const tab = getAdminTab();
     t_add.classList.toggle("active", tab==="add");
     t_points.classList.toggle("active", tab==="points");
-    t_find.classList.toggle("active", tab==="find");
 
     if(tab==="add") return adminTabAdd();
-    if(tab==="points") return adminTabPoints();
-    return adminTabFind();
+    return adminTabPoints();
   }
 
   function adminTabAdd(){
@@ -615,6 +480,7 @@ function pageAdmin(){
       if(!isValidTelegramId(tid)) return openModal("Error","Telegram ID tidak valid.",{okText:"OK"});
       await updateDoc(doc(db,"members", tid), { pin: last4(tid) });
       openModal("Berhasil", "PIN direset ke 4 digit terakhir Telegram ID.", { okText:"OK" });
+      await adminShowMember();
     };
 
     async function adminAddPoints(delta){
@@ -646,6 +512,7 @@ function pageAdmin(){
       const points = Number(m.points_balance||0);
       const pot = Math.floor(points/100)*1000;
       const st = memberStatus(m);
+      const exp = st.exp ? fmtDate(st.exp) : "-";
 
       p_out.innerHTML = `
         <div class="card">
@@ -656,66 +523,15 @@ function pageAdmin(){
           <div><b>Status:</b> <span class="badge">${st.label}</span></div>
           <div><b>Poin:</b> ${points}</div>
           <div class="mini">Potongan saat ini: Rp${pot.toLocaleString("id-ID")}</div>
-          <div class="mini">Expire: ${st.exp ? fmtDate(st.exp) : "-"}</div>
+          <div class="mini">Expire: ${exp}</div>
         </div>
       `;
     }
   }
 
-  function adminTabFind(){
-    document.getElementById("tab").innerHTML = `
-      <h3 style="margin:12px 0 6px;">Cari Member</h3>
-      <div class="small">Cari cepat lewat Telegram ID / Kode Member / Nama (exact)</div>
-
-      <label>Tipe</label>
-      <select id="f_type">
-        <option value="telegram">Telegram ID</option>
-        <option value="code">Kode Member</option>
-        <option value="name">Nama (exact)</option>
-      </select>
-
-      <label>Kata kunci</label>
-      <input id="f_key" placeholder="contoh: 123456789" />
-
-      <button class="btn" id="f_btn">Cari</button>
-      <div id="f_out" style="margin-top:12px;"></div>
-    `;
-
-    f_btn.onclick = async ()=>{
-      const type = f_type.value;
-      const key = String(f_key.value||"").trim();
-      f_out.innerHTML = "";
-
-      try{
-        if(type==="telegram"){
-          if(!isValidTelegramId(key)) throw new Error("Telegram ID tidak valid.");
-          const m = await getMemberByTelegramId(key);
-          if(!m) throw new Error("Member tidak ditemukan.");
-          f_out.innerHTML = memberCardPublic(m);
-          wirePublicListButtons();
-          return;
-        }
-        if(type==="code"){
-          const m = await getMemberByCode(key);
-          if(!m) throw new Error("Member tidak ditemukan.");
-          f_out.innerHTML = memberCardPublic(m);
-          wirePublicListButtons();
-          return;
-        }
-        const ms = await getMembersByName(key);
-        if(ms.length===0) throw new Error("Member tidak ditemukan.");
-        f_out.innerHTML = ms.map(m=>memberCardPublic(m,{listMode:true})).join("");
-        wirePublicListButtons();
-      }catch(e){
-        openModal("Info", String(e?.message || e), { okText:"OK" });
-      }
-    };
-  }
-
   onAuthStateChanged(auth, async (user)=>{
     if(!user) return loginView();
 
-    // hard check email (client-side)
     if(String(user.email||"").toLowerCase() !== ALLOWED_ADMIN_EMAIL.toLowerCase()){
       await adminLogout();
       return openModal("Akses Ditolak", "Akun ini tidak diizinkan.", { okText:"OK", onOk: loginView });
@@ -731,7 +547,6 @@ function pageAdmin(){
 
 function route(){
   const h = (location.hash || "#/").replace("#","");
-  // "#/admin"
   if(h.startsWith("/admin")) return "admin";
   return "home";
 }
