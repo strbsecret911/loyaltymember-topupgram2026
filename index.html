@@ -4,7 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Topupgram Loyalty</title>
-    <link rel="stylesheet" href="style.css?v=2026">
+    
+    <style>
+        :root {
+            --bg: #ffffff;
+            --accent: #C9DBF0;
+            --text: #474B59;
+            --border: #e6e8ef;
+            --btn: #474B59;
+            --btnText: #ffffff;
+            --muted: rgba(71, 75, 89, .78);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+        .wrap { max-width: 520px; margin: 0 auto; padding: 14px; }
+        .header { display: flex; align-items: flex-start; gap: 12px; }
+        .brand h1 { font-size: 20px; margin: 0; }
+        .sub { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+        .card { margin-top: 14px; padding: 14px; border-radius: 16px; border: 1px solid var(--border); background: #fff; }
+        .card.accent { background: linear-gradient(0deg, rgba(201, 219, 240, .38), rgba(201, 219, 240, .38)), #fff; }
+        .btn { width: 100%; margin-top: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--btn); background: var(--btn); color: var(--btnText); font-weight: 700; cursor: pointer; }
+        .btn.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); font-weight: 650; }
+        .btn:disabled { opacity: .55; cursor: not-allowed; }
+        .row { display: flex; gap: 10px; align-items: stretch; }
+        .row > * { flex: 1; }
+        label { display: block; margin-top: 10px; font-size: 13px; }
+        input { width: 100%; margin-top: 6px; padding: 12px; border-radius: 14px; border: 1px solid var(--border); outline: none; background: #fff; }
+        .badge { display: inline-block; margin-left: 6px; padding: 4px 10px; font-size: 12px; border-radius: 999px; border: 1px solid var(--border); background: #fff; }
+        hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+        .small { font-size: 12px; color: var(--muted); }
+        .mini { font-size: 12px; color: rgba(71, 75, 89, .72); margin-top: 4px; }
+        .error { margin-top: 8px; color: #b00020; font-size: 13px; }
+        .tabs { display: flex; gap: 8px; margin-top: 12px; }
+        .tab { flex: 1; padding: 10px; border-radius: 14px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-weight: 700; color: var(--text); }
+        .tab.active { border-color: var(--text); background: rgba(201, 219, 240, .35); }
+        .footer { margin-top: 18px; }
+        .hint { padding: 12px; border-radius: 16px; border: 1px dashed var(--border); font-size: 12px; color: var(--muted); }
+        
+        /* Modal */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); display: flex; align-items: center; justify-content: center; padding: 18px; z-index: 9999; }
+        .modal { width: 100%; max-width: 420px; background: #fff; border-radius: 18px; border: 1px solid var(--border); overflow: hidden; }
+        .m-body { padding: 16px; }
+        .modal h3 { margin: 0 0 6px; font-size: 18px; }
+        .modal p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+        .m-actions { padding: 12px 16px 16px; display: flex; gap: 10px; justify-content: flex-end; }
+        .m-actions button { margin-top: 0; }
+    </style>
 </head>
 <body>
     <div class="wrap">
@@ -15,13 +60,247 @@
             </div>
         </header>
 
-        <main id="view"></main>
+        <main id="view">
+            <div style="padding:20px; text-align:center; color:#999;">Memuat aplikasi...</div>
+        </main>
 
         <footer class="footer">
             <div class="hint">All rights reserved. 2026.</div>
         </footer>
     </div>
 
-    <script type="module" src="script.js?v=2026"></script>
+    <script type="module">
+        // 1. IMPORT DARI CDN
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, getDocs, query, where, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+        // 2. CONFIG FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPAPvzRAHLUVCVB1x7BbmglmB71AQcrpY",
+            authDomain: "loyaltymembertpg.firebaseapp.com",
+            projectId: "loyaltymembertpg",
+            storageBucket: "loyaltymembertpg.firebasestorage.app",
+            messagingSenderId: "177443242278",
+            appId: "1:177443242278:web:8aac0f53f1362abcf641e7",
+            measurementId: "G-Y03QP3MP6H"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // 3. LOGIKA APLIKASI
+        const view = document.getElementById("view");
+        const ALLOWED_ADMIN_EMAIL = "dinijanuari23@gmail.com";
+        const MEMBER_CODE_PREFIX = "TPG0420";
+
+        // Fungsi Render Halaman
+        function card(html, accent=false){
+            view.innerHTML = `<section class="card ${accent ? "accent":""}">${html}</section>`;
+        }
+
+        function go(hash){
+            location.hash = hash;
+            render();
+        }
+
+        function escapeHtml(s){
+            return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+        }
+
+        // --- Helper: Format Tanggal & Angka ---
+        function fmtDate(d){ try{ return new Date(d).toLocaleDateString("id-ID",{day:"numeric",month:"long",year:"numeric"}); }catch{ return "-"; } }
+        function fmtDateTimeNow(){ try{ return new Date().toLocaleString("id-ID", { day:"2-digit", month:"long", year:"numeric", hour:"2-digit", minute:"2-digit" }); }catch{ return String(new Date()); } }
+        function addMonths(d,m){ const x=new Date(d); const day=x.getDate(); x.setMonth(x.getMonth()+m); if(x.getDate()<day) x.setDate(0); return x; }
+        function isValidTelegramId(tid){ return /^[0-9]{5,15}$/.test(String(tid||"").trim()); }
+        function last4(tid){ return String(tid||"").trim().slice(-4).padStart(4,"0"); }
+        function makeMemberCode(tid){ return `${MEMBER_CODE_PREFIX}${String(tid).trim()}`; }
+        function makeVoucher5(){ let out=""; for(let i=0;i<5;i++) out+=String(Math.floor(Math.random()*10)); return out; }
+        function memberStatus(m){
+            const exp = m.expires_at?.toDate ? m.expires_at.toDate() : (m.expires_at ? new Date(m.expires_at) : null);
+            if(!exp) return { label:"-", expired:false, exp:null };
+            const expired = (new Date() > exp);
+            return { label: expired ? "KEDALUWARSA" : "AKTIF", expired, exp };
+        }
+
+        // --- Modal ---
+        function openModal(title, message, { okText="OK", cancelText=null, onOk=null } = {}){
+            const wrap = document.createElement("div");
+            wrap.className = "modal-backdrop";
+            wrap.innerHTML = `
+                <div class="modal">
+                    <div class="m-body"><h3>${escapeHtml(title)}</h3><p>${escapeHtml(message).replace(/\n/g,"<br/>")}</p></div>
+                    <div class="m-actions">
+                        ${cancelText ? `<button class="btn secondary" id="m_cancel">${escapeHtml(cancelText)}</button>` : ``}
+                        <button class="btn" id="m_ok">${escapeHtml(okText)}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(wrap);
+            const close = ()=> wrap.remove();
+            wrap.addEventListener("click",(e)=>{ if(e.target === wrap) close(); });
+            wrap.querySelector("#m_ok").onclick = async ()=>{ try{ if(onOk) await onOk(); } finally{ close(); } };
+            if(cancelText) wrap.querySelector("#m_cancel").onclick = close;
+        }
+
+        // --- Halaman: Home (Cari) ---
+        function pageHome(){
+            card(`
+                <h2 style="margin:0 0 6px;">Cari Membership</h2>
+                <div class="small">Masukkan <b>Telegram ID</b> (angka) atau <b>Kode Member</b>.</div>
+                <label>Kata Kunci</label>
+                <input id="key" placeholder="contoh: 123456789 atau ${MEMBER_CODE_PREFIX}123456789" />
+                <div id="msg"></div>
+                <button class="btn" id="btn">Cari</button>
+                <div id="result" style="margin-top:12px;"></div>
+                <div class="small" style="margin-top:10px;">Admin panel: buka URL dengan <b>#/admin</b></div>
+            `, true);
+
+            const key = document.getElementById("key");
+            const btn = document.getElementById("btn");
+            const result = document.getElementById("result");
+
+            key.addEventListener("keydown", (e)=>{ if(e.key === "Enter") btn.click(); });
+            btn.onclick = async ()=>{
+                result.innerHTML = "";
+                const q = String(key.value||"").trim();
+                if(!q) return openModal("Info","Masukkan data dulu.");
+
+                try {
+                    let m = null;
+                    if(isValidTelegramId(q)) {
+                        const snap = await getDoc(doc(db,"members", q));
+                        if(snap.exists()) m = snap.data();
+                    } else {
+                        const qy = query(collection(db,"members"), where("member_code","==", q), limit(1));
+                        const snap = await getDocs(qy);
+                        if(!snap.empty) m = snap.docs[0].data();
+                    }
+
+                    if(!m) throw new Error("Data member tidak ditemukan.");
+                    renderMemberPublic(m);
+                } catch(e) {
+                    openModal("Info", e.message);
+                }
+            };
+        }
+
+        function renderMemberPublic(m){
+            const points = Number(m.points_balance||0);
+            const st = memberStatus(m);
+            const pot = Math.floor(points/100)*1000;
+            
+            document.getElementById("result").innerHTML = `
+                <div class="card accent">
+                    <div><b>Nama:</b> ${escapeHtml(m.name)}</div>
+                    <div><b>ID:</b> ${escapeHtml(m.telegram_id)}</div>
+                    <div><b>Status:</b> <span class="badge">${st.label}</span></div>
+                    <div><b>Poin:</b> ${points}</div>
+                    <div class="mini">Potongan: Rp${pot.toLocaleString("id-ID")}</div>
+                    <hr/>
+                    <div class="small"><b>Redeem (PIN: 4 digit akhir ID)</b></div>
+                    <div class="row">
+                        <button class="btn secondary" onclick="window.doRedeem('${m.telegram_id}',100)">Redeem 100</button>
+                        <button class="btn secondary" onclick="window.doRedeem('${m.telegram_id}',200)">Redeem 200</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Hack agar tombol bisa dipanggil dari HTML string
+        window.doRedeem = async (tid, pointsNeeded) => {
+            const mRef = doc(db, "members", tid);
+            const snap = await getDoc(mRef);
+            if(!snap.exists()) return;
+            const m = snap.data();
+            const cur = Number(m.points_balance||0);
+            const pin = last4(tid);
+
+            openModal("Konfirmasi", `Redeem ${pointsNeeded} poin?\nPoin kamu: ${cur}`, {
+                okText: "Lanjut", cancelText: "Batal",
+                onOk: async () => {
+                    const inputPin = prompt(`Masukkan PIN (4 digit terakhir ID: ${pin})`);
+                    if(inputPin !== pin) return alert("PIN SALAH");
+                    if(cur < pointsNeeded) return alert("POIN TIDAK CUKUP");
+
+                    const next = cur - pointsNeeded;
+                    const voucher = makeVoucher5();
+                    
+                    // Update Poin
+                    await updateDoc(mRef, { points_balance: next, last_redeemed_at: serverTimestamp() });
+                    // Catat Log
+                    await addDoc(collection(db,"redeem_logs"), {
+                        telegram_id: tid, voucher_code: voucher, points_used: pointsNeeded, created_at: serverTimestamp()
+                    });
+
+                    openModal("BERHASIL", `Kode Voucher: ${voucher}\n(Screenshot ini)`, {okText:"OK"});
+                    pageHome(); // Reset
+                }
+            });
+        };
+
+        // --- Halaman: Admin ---
+        function pageAdmin(){
+            card(`<h2 style="margin:0;">Admin Panel</h2><div id="abox">Checking auth...</div>`, true);
+            onAuthStateChanged(auth, (user) => {
+                if(!user) {
+                    document.getElementById("abox").innerHTML = `<button class="btn" id="alogin">Login Google</button>`;
+                    document.getElementById("alogin").onclick = async () => {
+                        try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch(e){ alert(e.message); }
+                    };
+                } else if(user.email.toLowerCase() !== ALLOWED_ADMIN_EMAIL.toLowerCase()) {
+                    document.getElementById("abox").innerHTML = `Akun ${user.email} tidak diizinkan. <button class="btn secondary" id="alogout">Logout</button>`;
+                    document.getElementById("alogout").onclick = () => signOut(auth);
+                } else {
+                    renderAdminDashboard(user);
+                }
+            });
+        }
+
+        function renderAdminDashboard(user){
+            document.getElementById("abox").innerHTML = `
+                <div class="small">Login: ${user.email}</div>
+                <button class="btn secondary" id="alogout">Logout</button>
+                <hr/>
+                <h3>Tambah Member</h3>
+                <input id="new_id" placeholder="Telegram ID (Angka)" type="number">
+                <input id="new_name" placeholder="Nama Member">
+                <button class="btn" id="btn_save">Simpan Member</button>
+                <div id="adm_msg"></div>
+            `;
+            
+            document.getElementById("alogout").onclick = () => signOut(auth);
+            document.getElementById("btn_save").onclick = async () => {
+                const tid = document.getElementById("new_id").value.trim();
+                const nm = document.getElementById("new_name").value.trim();
+                if(!tid || !nm) return alert("Isi ID dan Nama");
+
+                try {
+                    await setDoc(doc(db,"members", tid), {
+                        telegram_id: tid, name: nm, member_code: makeMemberCode(tid),
+                        pin: last4(tid), points_balance: 0, created_at: serverTimestamp(),
+                        expires_at: addMonths(new Date(), 5), status: "ACTIVE"
+                    }, {merge:true});
+                    alert("Member Berhasil Dibuat/Update!");
+                    document.getElementById("new_id").value = "";
+                } catch(e){
+                    alert("Error: " + e.message);
+                }
+            };
+        }
+
+        // --- Router ---
+        function render(){
+            const r = location.hash.replace("#","");
+            if(r.startsWith("/admin")) return pageAdmin();
+            return pageHome();
+        }
+
+        window.addEventListener("hashchange", render);
+        window.addEventListener("load", render);
+        
+        // Safety check manual render
+        setTimeout(render, 500); 
+    </script>
 </body>
 </html>
