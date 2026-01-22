@@ -1,105 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Topupgram — Membership</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TPG Card Membership</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
+  <div class="topbar">
     <div class="brand">
-      <div class="logo">TG</div>
+      <div class="logo">TPG</div>
       <div>
-        <div class="brand-name">Topupgram</div>
-        <div class="brand-sub">Program Membership</div>
+        <div class="brand-title">TPG Card</div>
+        <div class="brand-sub">Membership • Poin • Voucher</div>
       </div>
     </div>
 
-    <div class="topbar-actions">
-      <div id="whoami" class="chip hidden"></div>
-      <button id="btnSignOut" class="btn ghost hidden">Keluar</button>
-    </div>
-  </header>
+    <div class="topbar-right" id="topbarRight"></div>
+  </div>
 
   <main class="container">
-    <!-- AUTH -->
-    <section id="viewAuth" class="card">
-      <h1>Masuk / Daftar</h1>
-      <p class="muted">Gunakan email & password. Setelah masuk, sistem akan menampilkan panel sesuai role (User / Admin).</p>
+    <div id="app"></div>
+  </main>
 
-      <div class="grid2">
-        <div>
-          <label>Email</label>
-          <input id="authEmail" type="email" placeholder="nama@domain.com" autocomplete="email" />
-        </div>
-        <div>
-          <label>Password</label>
-          <input id="authPass" type="password" placeholder="••••••••" autocomplete="current-password" />
-        </div>
-      </div>
+  <!-- html2canvas for "save as photo" -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-      <div class="row">
-        <button id="btnLogin" class="btn primary">Masuk</button>
-        <button id="btnRegister" class="btn">Daftar</button>
-      </div>
-
-      <div class="divider"></div>
-      <details>
-        <summary>Catatan setup Admin</summary>
-        <p class="muted">
-          Setelah user terdaftar, set dokumen <code>users/{uid}</code> di Firestore menjadi:
-          <code>{ role: "admin" }</code>. Sisanya otomatis.
-        </p>
-      </details>
-    </section>
-
-    <!-- USER PANEL -->
-    <section id="viewUser" class="hidden">
-      <div class="page-head">
-        <h1>User Panel</h1>
-        <p class="muted">Pilih paket membership dan pantau status.</p>
-      </div>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Paket Membership</h2>
-          <button id="btnRefreshPlans" class="btn ghost">Refresh</button>
-        </div>
-        <div id="plansGrid" class="plans"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Membership Saya</h2>
-          <button id="btnRefreshMe" class="btn ghost">Refresh</button>
-        </div>
-        <div id="myMembership" class="muted">—</div>
-      </section>
-    </section>
-
-    <!-- ADMIN PANEL -->
-    <section id="viewAdmin" class="hidden">
-      <div class="page-head">
-        <h1>Admin Panel</h1>
-        <p class="muted">Kelola paket & approve membership user.</p>
-      </div>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Buat / Update Paket</h2>
-          <span class="muted small">Disimpan di koleksi <code>plans</code></span>
-        </div>
-
-        <div class="grid3">
-          <div>
-            <label>Nama Paket</label>
-            <input id="planName" placeholder="Gold / Platinum" />
-          </div>
-          <div>
-            <label>Harga (IDR)</label>
-            <input id="planPrice" type="number" min="0" step="1000" placeholder="50000" />
-          </div>
+  <!-- Firebase v9 modular (CDN) -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>          </div>
           <div>
             <label>Durasi (hari)</label>
             <input id="planDays" type="number" min="1" step="1" placeholder="30" />
