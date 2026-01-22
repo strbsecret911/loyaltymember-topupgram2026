@@ -1,34 +1,18 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut
+  getFirestore, doc, getDoc, setDoc, addDoc, collection, serverTimestamp,
+  query, where, orderBy, limit, getDocs, updateDoc, deleteDoc, runTransaction
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  serverTimestamp,
-  updateDoc,
-  deleteDoc,
-  where,
-  limit
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-
 /** =========================
- *  CONFIG: isi punyamu
+ *  CONFIG (EDIT THIS)
  *  ========================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyBPAPvzRAHLUVCVB1x7BbmglmB71AQcrpY",
+  const firebaseConfig = {
+  apiKey: "AIzaSyBPAPvzRAHLUVCVB1x7BbmgImB7IAQcrpY",
   authDomain: "loyaltymembertpg.firebaseapp.com",
   projectId: "loyaltymembertpg",
   storageBucket: "loyaltymembertpg.firebasestorage.app",
@@ -37,546 +21,488 @@ const firebaseConfig = {
   measurementId: "G-Y03QP3MP6H"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const ADMIN_EMAIL = "dinijanuari23@gmail.com";
 
 /** =========================
- *  UI helpers
+ *  INIT
  *  ========================= */
-const $ = (id) => document.getElementById(id);
+const appFirebase = initializeApp(firebaseConfig);
+const db = getFirestore(appFirebase);
+const auth = getAuth(appFirebase);
+const provider = new GoogleAuthProvider();
 
-const viewAuth = $("viewAuth");
-const viewUser = $("viewUser");
-const viewAdmin = $("viewAdmin");
+const $app = document.getElementById("app");
+const $topbarRight = document.getElementById("topbarRight");
 
-const whoami = $("whoami");
-const btnSignOut = $("btnSignOut");
+const state = {
+  isAdminRoute: false,
+  adminUser: null,
+  publicView: "landing", // landing | register | lookup | member
+  member: null,          // membersPublic doc data
+  memberCode: "",
+  memberTab: "vouchers", // vouchers | redeem
+};
 
-const toastEl = $("toast");
-let toastTimer = null;
-function toast(msg){
-  toastEl.textContent = msg;
-  toastEl.classList.remove("hidden");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.add("hidden"), 2200);
+function isAdminRoute() {
+  const h = (location.hash || "").toLowerCase();
+  const q = new URLSearchParams(location.search);
+  const path = (location.pathname || "").toLowerCase();
+  return h.includes("admin") || q.has("admin") || path.endsWith("/admin");
 }
 
-function rupiah(n){
-  const x = Number(n || 0);
-  return new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", maximumFractionDigits:0 }).format(x);
+function fmtDate(ts) {
+  if (!ts) return "-";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("id-ID", { year:"numeric", month:"short", day:"2-digit" });
 }
 
-function showOnly(which){
-  viewAuth.classList.add("hidden");
-  viewUser.classList.add("hidden");
-  viewAdmin.classList.add("hidden");
+function nowMs(){ return Date.now(); }
+function tsMs(ts){ return ts?.toMillis ? ts.toMillis() : (ts ? new Date(ts).getTime() : 0); }
 
-  which.classList.remove("hidden");
-}
-
-$("year").textContent = new Date().getFullYear();
-
-/** =========================
- *  AUTH actions
- *  ========================= */
-$("btnLogin").addEventListener("click", async () => {
-  const email = $("authEmail").value.trim();
-  const pass = $("authPass").value.trim();
-  if(!email || !pass) return toast("Isi email & password dulu ya.");
-  try{
-    await signInWithEmailAndPassword(auth, email, pass);
-    toast("Login berhasil.");
-  }catch(e){
-    console.error(e);
-    toast(e?.message || "Gagal login.");
-  }
-});
-
-$("btnRegister").addEventListener("click", async () => {
-  const email = $("authEmail").value.trim();
-  const pass = $("authPass").value.trim();
-  if(!email || !pass) return toast("Isi email & password dulu ya.");
-  if(pass.length < 6) return toast("Password minimal 6 karakter.");
-  try{
-    const cred = await createUserWithEmailAndPassword(auth, email, pass);
-
-    // Buat profil user default
-    await setDoc(doc(db, "users", cred.user.uid), {
-      email,
-      role: "user",         // default
-      createdAt: serverTimestamp(),
-    }, { merge: true });
-
-    toast("Daftar berhasil. Kamu sudah login.");
-  }catch(e){
-    console.error(e);
-    toast(e?.message || "Gagal daftar.");
-  }
-});
-
-btnSignOut.addEventListener("click", async () => {
-  await signOut(auth);
-  toast("Sampai ketemu lagi!");
-});
-
-/** =========================
- *  ROLE & ROUTING
- *  ========================= */
-let currentUser = null;
-let currentRole = "user";
-
-onAuthStateChanged(auth, async (user) => {
-  currentUser = user;
-
-  if(!user){
-    whoami.classList.add("hidden");
-    btnSignOut.classList.add("hidden");
-    showOnly(viewAuth);
+function setTopbar() {
+  if (!state.isAdminRoute) {
+    $topbarRight.innerHTML = `<a class="badge" href="#admin">Admin</a>`;
     return;
   }
 
-  btnSignOut.classList.remove("hidden");
-
-  const role = await getUserRole(user.uid, user.email);
-  currentRole = role;
-
-  whoami.textContent = `${user.email} • ${role.toUpperCase()}`;
-  whoami.classList.remove("hidden");
-
-  if(role === "admin"){
-    showOnly(viewAdmin);
-    await adminRefreshAll();
-  }else{
-    showOnly(viewUser);
-    await userRefreshAll();
+  if (!state.adminUser) {
+    $topbarRight.innerHTML = `<span class="badge warn">Admin mode</span>`;
+  } else {
+    $topbarRight.innerHTML = `
+      <span class="badge ok">Admin: ${state.adminUser.email}</span>
+      <button class="btn secondary" id="btnLogout">Logout</button>
+    `;
+    document.getElementById("btnLogout")?.addEventListener("click", async () => {
+      await signOut(auth);
+    });
   }
-});
-
-async function getUserRole(uid, email){
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  if(!snap.exists()){
-    await setDoc(ref, { email, role: "user", createdAt: serverTimestamp() }, { merge:true });
-    return "user";
-  }
-  const data = snap.data();
-  return data?.role === "admin" ? "admin" : "user";
 }
 
 /** =========================
- *  USER PANEL
- *  - Read plans
- *  - Create membership request
- *  - Read my membership
+ *  PUBLIC UI
  *  ========================= */
-$("btnRefreshPlans").addEventListener("click", userLoadPlans);
-$("btnRefreshMe").addEventListener("click", userLoadMyMembership);
+function renderPublicLanding() {
+  $app.innerHTML = `
+    <div class="grid">
+      <div class="card">
+        <div class="h1">Membership baru, mulai di sini.</div>
+        <p class="p">Daftar dulu kalau belum punya, atau cari data member menggunakan <b>kode membership</b>.</p>
+        <div class="row">
+          <button class="btn" id="goRegister">Daftar</button>
+          <button class="btn secondary" id="goLookup">Login</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="badge">Tip: Login di sini adalah “cari kode membership”.</div>
+      </div>
 
-async function userRefreshAll(){
-  await userLoadPlans();
-  await userLoadMyMembership();
+      <div class="card">
+        <div class="h1">Aturan singkat</div>
+        <div class="kv">
+          <div class="k">Redeem</div><div class="v">Minimal 100 poin</div>
+          <div class="k">Nilai</div><div class="v">100 poin = Rp1.000</div>
+          <div class="k">Voucher</div><div class="v">TPGVOUCHMEMBER(1-99999)</div>
+          <div class="k">Masa berlaku</div><div class="v">1 minggu setelah ACC admin</div>
+        </div>
+        <hr class="sep" />
+        <div class="small">Mode admin hanya untuk akun Google admin.</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("goRegister").onclick = () => { state.publicView = "register"; render(); };
+  document.getElementById("goLookup").onclick = () => { state.publicView = "lookup"; render(); };
 }
 
-async function userLoadPlans(){
-  const plansGrid = $("plansGrid");
-  plansGrid.innerHTML = `<div class="muted">Memuat paket...</div>`;
+function renderPublicRegister() {
+  $app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="h1">Daftar membership</div>
+          <p class="p">Masukkan nama/inisial dan username Telegram. Permintaan masuk ke admin untuk disetujui.</p>
+        </div>
+        <button class="btn secondary" id="back">Kembali</button>
+      </div>
 
-  try{
-    const q = query(collection(db, "plans"), orderBy("price", "asc"));
-    const snap = await getDocs(q);
+      <label>Nama / Inisial</label>
+      <input class="input" id="name" placeholder="Contoh: Dini" />
 
-    if(snap.empty){
-      plansGrid.innerHTML = `<div class="muted">Belum ada paket. (Admin bisa buat paket di Admin Panel)</div>`;
+      <label>Username Telegram</label>
+      <input class="input" id="tg" placeholder="Contoh: @dinijanuari23" />
+
+      <div class="spacer"></div>
+      <button class="btn" id="submit">Kirim Permintaan</button>
+      <div class="spacer"></div>
+      <div id="msg" class="small"></div>
+    </div>
+  `;
+
+  document.getElementById("back").onclick = () => { state.publicView = "landing"; render(); };
+  document.getElementById("submit").onclick = async () => {
+    const name = document.getElementById("name").value.trim();
+    let telegramUsername = document.getElementById("tg").value.trim();
+    const $msg = document.getElementById("msg");
+
+    if (!name || !telegramUsername) {
+      $msg.textContent = "Mohon isi semua data.";
+      return;
+    }
+    if (!telegramUsername.startsWith("@")) telegramUsername = "@" + telegramUsername;
+
+    await addDoc(collection(db, "requests"), {
+      name,
+      telegramUsername,
+      status: "pending",
+      createdAt: serverTimestamp(),
+    });
+
+    $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan admin.";
+    document.getElementById("submit").disabled = true;
+  };
+}
+
+function renderPublicLookup() {
+  $app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="h1">Login</div>
+          <p class="p">Masukkan <b>kode membership</b> (contoh: <span class="mono">TPGCARD12345</span>) untuk melihat kartu member.</p>
+        </div>
+        <button class="btn secondary" id="back">Kembali</button>
+      </div>
+
+      <label>Kode Membership</label>
+      <input class="input mono" id="code" placeholder="TPGCARD...." />
+
+      <div class="spacer"></div>
+      <button class="btn" id="search">Cari</button>
+      <div class="spacer"></div>
+      <div id="msg" class="small"></div>
+    </div>
+  `;
+
+  document.getElementById("back").onclick = () => { state.publicView = "landing"; render(); };
+  document.getElementById("search").onclick = async () => {
+    const code = document.getElementById("code").value.trim().toUpperCase();
+    const $msg = document.getElementById("msg");
+
+    if (!code) { $msg.textContent = "Mohon isi kode."; return; }
+
+    const snap = await getDoc(doc(db, "membersPublic", code));
+    if (!snap.exists()) {
+      $msg.textContent = "❌ Kode tidak ditemukan / belum aktif.";
       return;
     }
 
-    plansGrid.innerHTML = "";
-    snap.forEach((d) => {
-      const p = d.data();
-      const benefits = Array.isArray(p.benefits) ? p.benefits : [];
-      const el = document.createElement("div");
-      el.className = "plan";
-      el.innerHTML = `
-        <div class="name">${escapeHtml(p.name || "Paket")}</div>
-        <div class="price">${rupiah(p.price)}</div>
-        <div class="muted small">Durasi: ${Number(p.days || 0)} hari</div>
-        <ul>${benefits.map(b => `<li>${escapeHtml(b)}</li>`).join("")}</ul>
-        <div class="actions">
-          <button class="btn primary" data-action="join" data-planid="${d.id}">Gabung</button>
-        </div>
-      `;
-      plansGrid.appendChild(el);
-    });
-
-    plansGrid.querySelectorAll(`[data-action="join"]`).forEach(btn => {
-      btn.addEventListener("click", () => userRequestMembership(btn.dataset.planid));
-    });
-  }catch(e){
-    console.error(e);
-    plansGrid.innerHTML = `<div class="muted">Gagal memuat paket.</div>`;
-    toast("Gagal memuat paket.");
-  }
+    state.member = snap.data();
+    state.memberCode = code;
+    state.publicView = "member";
+    state.memberTab = "vouchers";
+    render();
+  };
 }
 
-async function userRequestMembership(planId){
-  if(!currentUser) return;
-  try{
-    // Cek apakah sudah ada request "pending" terbaru
-    const existing = await getDocs(query(
-      collection(db, "memberships"),
-      where("uid","==", currentUser.uid),
-      orderBy("createdAt","desc"),
-      limit(1)
-    ));
+function renderMemberPage() {
+  const m = state.member;
+  const memberExpired = nowMs() > tsMs(m.expiresAt);
+  const memberStatusBadge = memberExpired
+    ? `<span class="badge danger">Membership Kadaluarsa</span>`
+    : `<span class="badge ok">Membership Aktif</span>`;
 
-    if(!existing.empty){
-      const last = existing.docs[0].data();
-      if(last.status === "pending"){
-        toast("Request kamu masih pending.");
+  $app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="h1">Member Card</div>
+          <div class="row">
+            ${memberStatusBadge}
+            <span class="badge">Poin: <b>${m.points ?? 0}</b></span>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn secondary" id="logout">Ganti Kode</button>
+        </div>
+      </div>
+
+      <hr class="sep" />
+
+      <div class="kv">
+        <div class="k">Nama</div><div class="v">${m.name ?? "-"}</div>
+        <div class="k">Kode Member</div><div class="v mono">${m.memberCode ?? state.memberCode}</div>
+        <div class="k">Aktif sejak</div><div class="v">${fmtDate(m.approvedAt)}</div>
+        <div class="k">Berlaku sampai</div><div class="v">${fmtDate(m.expiresAt)}</div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="tabs">
+        <div class="tab ${state.memberTab === "vouchers" ? "active" : ""}" id="tabV">Voucher Saya</div>
+        <div class="tab ${state.memberTab === "redeem" ? "active" : ""}" id="tabR">Redeem</div>
+      </div>
+
+      <div class="spacer"></div>
+      <div id="memberTabContent"></div>
+    </div>
+  `;
+
+  document.getElementById("logout").onclick = () => {
+    state.member = null; state.memberCode = ""; state.publicView = "lookup";
+    render();
+  };
+
+  document.getElementById("tabV").onclick = () => { state.memberTab = "vouchers"; renderMemberTab(); };
+  document.getElementById("tabR").onclick = () => { state.memberTab = "redeem"; renderMemberTab(); };
+
+  renderMemberTab();
+}
+
+function renderMemberTab() {
+  const wrap = document.getElementById("memberTabContent");
+  if (!wrap) return;
+
+  if (state.memberTab === "redeem") {
+    wrap.innerHTML = `
+      <div class="voucher-card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:900;font-size:16px">Redeem voucher</div>
+            <div class="small">Minimal 100 poin untuk voucher diskon Rp1.000. Permintaan akan diproses admin.</div>
+          </div>
+          <span class="badge">100 poin → Rp1.000</span>
+        </div>
+
+        <div class="spacer"></div>
+        <button class="btn" id="sendRedeem">Kirim Permintaan Redeem (100 poin)</button>
+        <div class="spacer"></div>
+        <div id="redeemMsg" class="small"></div>
+      </div>
+    `;
+
+    document.getElementById("sendRedeem").onclick = async () => {
+      const $msg = document.getElementById("redeemMsg");
+
+      // Optional: block jika poin kurang dari 100 (client-side)
+      if ((state.member.points ?? 0) < 100) {
+        $msg.textContent = "❌ Poin kamu belum cukup (minimal 100).";
         return;
       }
-    }
 
-    await addDoc(collection(db, "memberships"), {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      planId,
-      status: "pending",      // pending | active | rejected | expired
-      createdAt: serverTimestamp(),
-      activeUntil: null,      // Timestamp jika di-approve
-    });
-
-    toast("Request terkirim! Menunggu approve admin.");
-    await userLoadMyMembership();
-  }catch(e){
-    console.error(e);
-    toast("Gagal mengirim request.");
-  }
-}
-
-async function userLoadMyMembership(){
-  const box = $("myMembership");
-  box.textContent = "Memuat...";
-  if(!currentUser) return;
-
-  try{
-    const snap = await getDocs(query(
-      collection(db, "memberships"),
-      where("uid","==", currentUser.uid),
-      orderBy("createdAt","desc"),
-      limit(1)
-    ));
-
-    if(snap.empty){
-      box.innerHTML = `<span class="muted">Belum ada membership. Pilih paket untuk request.</span>`;
-      return;
-    }
-
-    const mDoc = snap.docs[0];
-    const m = mDoc.data();
-
-    // Ambil info plan untuk tampilan
-    let planTxt = m.planId;
-    const pSnap = await getDoc(doc(db, "plans", m.planId));
-    if(pSnap.exists()){
-      const p = pSnap.data();
-      planTxt = `${p.name} (${rupiah(p.price)} / ${p.days} hari)`;
-    }
-
-    const until = m.activeUntil?.toDate ? m.activeUntil.toDate() : null;
-    const untilTxt = until ? until.toLocaleString("id-ID") : "—";
-
-    box.innerHTML = `
-      <div><b>Status:</b> ${badge(m.status)}</div>
-      <div><b>Paket:</b> ${escapeHtml(planTxt)}</div>
-      <div><b>Aktif sampai:</b> ${escapeHtml(untilTxt)}</div>
-      <div class="muted small">ID: ${mDoc.id}</div>
-    `;
-  }catch(e){
-    console.error(e);
-    box.innerHTML = `<span class="muted">Gagal memuat status membership.</span>`;
-    toast("Gagal memuat membership.");
-  }
-}
-
-/** =========================
- *  ADMIN PANEL
- *  - Create/update plans
- *  - List & delete plans
- *  - Approve/reject membership
- *  ========================= */
-$("btnSavePlan").addEventListener("click", adminSavePlan);
-$("btnSeedPlans").addEventListener("click", adminSeedPlans);
-$("btnAdminRefreshPlans").addEventListener("click", adminLoadPlans);
-$("btnRefreshRequests").addEventListener("click", adminLoadRequests);
-
-async function adminRefreshAll(){
-  await adminLoadPlans();
-  await adminLoadRequests();
-}
-
-async function adminSavePlan(){
-  const name = $("planName").value.trim();
-  const price = Number($("planPrice").value || 0);
-  const days = Number($("planDays").value || 0);
-  const benefitsRaw = $("planBenefits").value.split("\n").map(s => s.trim()).filter(Boolean);
-
-  if(!name) return toast("Nama paket wajib diisi.");
-  if(!price || price < 0) return toast("Harga tidak valid.");
-  if(!days || days < 1) return toast("Durasi minimal 1 hari.");
-
-  try{
-    // Simple: pakai name sebagai key dokumen yang "aman"
-    const id = slug(name);
-    await setDoc(doc(db, "plans", id), {
-      name,
-      price,
-      days,
-      benefits: benefitsRaw,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(), // merge akan menjaga kalau sudah ada
-    }, { merge: true });
-
-    toast("Paket tersimpan.");
-    $("planName").value = "";
-    $("planPrice").value = "";
-    $("planDays").value = "";
-    $("planBenefits").value = "";
-    await adminLoadPlans();
-  }catch(e){
-    console.error(e);
-    toast("Gagal simpan paket.");
-  }
-}
-
-async function adminSeedPlans(){
-  try{
-    const samples = [
-      {
-        name: "Silver",
-        price: 25000,
-        days: 30,
-        benefits: ["Diskon 5%", "Support standar", "Akses promo mingguan"],
-      },
-      {
-        name: "Gold",
-        price: 50000,
-        days: 30,
-        benefits: ["Diskon 10%", "Priority support", "Akses promo harian"],
-      },
-      {
-        name: "Platinum",
-        price: 120000,
-        days: 90,
-        benefits: ["Diskon 15%", "VIP support", "Promo eksklusif", "Prioritas layanan"],
-      },
-    ];
-
-    for(const p of samples){
-      await setDoc(doc(db, "plans", slug(p.name)), {
-        ...p,
+      await addDoc(collection(db, "redeemRequests"), {
+        memberCode: state.memberCode,
+        pointsToSpend: 100,
+        status: "pending",
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge:true });
-    }
-    toast("Paket contoh dibuat.");
-    await adminLoadPlans();
-  }catch(e){
-    console.error(e);
-    toast("Gagal membuat paket contoh.");
+      });
+
+      $msg.textContent = "✅ Permintaan redeem terkirim. Tunggu admin ACC.";
+      document.getElementById("sendRedeem").disabled = true;
+    };
+
+    return;
   }
-}
 
-async function adminLoadPlans(){
-  const box = $("adminPlans");
-  box.innerHTML = `<div class="muted">Memuat paket...</div>`;
+  // vouchers tab
+  const vouchers = Array.isArray(state.member.vouchers) ? state.member.vouchers : [];
+  if (vouchers.length === 0) {
+    wrap.innerHTML = `<div class="small">Belum ada voucher. Kalau sudah ACC admin, voucher akan muncul di sini.</div>`;
+    return;
+  }
 
-  try{
-    const snap = await getDocs(query(collection(db, "plans"), orderBy("price","asc")));
-    if(snap.empty){
-      box.innerHTML = `<div class="muted">Belum ada paket.</div>`;
-      return;
-    }
+  const listHtml = vouchers
+    .slice()
+    .sort((a,b) => tsMs(b.approvedAt) - tsMs(a.approvedAt))
+    .map((v, idx) => {
+      const expired = nowMs() > tsMs(v.expiresAt);
+      const used = !!v.used;
+      const status = used ? "Dipakai" : (expired ? "Kadaluarsa" : "Aktif");
+      const badgeClass = used ? "danger" : (expired ? "warn" : "ok");
+      const disabled = used || expired;
 
-    box.innerHTML = "";
-    snap.forEach((d) => {
-      const p = d.data();
-      const el = document.createElement("div");
-      el.className = "item";
-      el.innerHTML = `
-        <div class="meta">
-          <div class="title">${escapeHtml(p.name)} <span class="muted small">(${d.id})</span></div>
-          <div class="sub">${rupiah(p.price)} • ${Number(p.days)} hari</div>
-          <div class="sub">${Array.isArray(p.benefits) ? p.benefits.map(escapeHtml).join(" • ") : ""}</div>
-        </div>
-        <div class="actions">
-          <button class="btn" data-action="delete-plan" data-id="${d.id}">Hapus</button>
+      return `
+        <div class="voucher-card" style="margin-top:10px">
+          <div class="row" style="justify-content:space-between; align-items:flex-start">
+            <div>
+              <div class="voucher-code mono">${v.code}</div>
+              <div class="small">Diskon: <b>Rp${(v.discountRp ?? 1000).toLocaleString("id-ID")}</b></div>
+            </div>
+            <span class="badge ${badgeClass}">${status}</span>
+          </div>
+
+          <div class="spacer"></div>
+          <div class="kv">
+            <div class="k">ACC admin</div><div class="v">${fmtDate(v.approvedAt)}</div>
+            <div class="k">Berlaku sampai</div><div class="v">${fmtDate(v.expiresAt)}</div>
+          </div>
+
+          <div class="spacer"></div>
+          <div class="row">
+            <button class="btn secondary" data-copy="${v.code}" ${disabled ? "disabled" : ""}>Salin Kode</button>
+            <button class="btn secondary" data-save="${idx}" ${disabled ? "disabled" : ""}>Save as Photo</button>
+          </div>
+
+          <div class="spacer"></div>
+          <div class="small" id="vmsg-${idx}"></div>
+
+          <!-- hidden render target for save-as-photo -->
+          <div style="position:relative; left:-9999px; top:-9999px; height:0; overflow:hidden;">
+            <div class="card" id="voucherCapture-${idx}" style="width:520px">
+              <div class="row" style="justify-content:space-between">
+                <div>
+                  <div style="font-weight:950;font-size:20px">TPG Voucher</div>
+                  <div class="small">Khusus member</div>
+                </div>
+                <span class="badge">${status}</span>
+              </div>
+              <hr class="sep" />
+              <div class="voucher-code mono">${v.code}</div>
+              <div class="spacer"></div>
+              <div class="kv">
+                <div class="k">Diskon</div><div class="v">Rp${(v.discountRp ?? 1000).toLocaleString("id-ID")}</div>
+                <div class="k">Berlaku sampai</div><div class="v">${fmtDate(v.expiresAt)}</div>
+                <div class="k">Member</div><div class="v mono">${state.memberCode}</div>
+              </div>
+            </div>
+          </div>
         </div>
       `;
-      box.appendChild(el);
+    }).join("");
+
+  wrap.innerHTML = listHtml;
+
+  // wire copy
+  wrap.querySelectorAll("[data-copy]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const code = btn.getAttribute("data-copy");
+      await navigator.clipboard.writeText(code);
+      btn.textContent = "Tersalin ✅";
+      setTimeout(()=> btn.textContent = "Salin Kode", 1200);
     });
+  });
 
-    box.querySelectorAll(`[data-action="delete-plan"]`).forEach(btn => {
-      btn.addEventListener("click", () => adminDeletePlan(btn.dataset.id));
-    });
-  }catch(e){
-    console.error(e);
-    box.innerHTML = `<div class="muted">Gagal memuat paket.</div>`;
-    toast("Gagal memuat paket.");
-  }
-}
-
-async function adminDeletePlan(planId){
-  try{
-    await deleteDoc(doc(db, "plans", planId));
-    toast("Paket dihapus.");
-    await adminLoadPlans();
-  }catch(e){
-    console.error(e);
-    toast("Gagal hapus paket.");
-  }
-}
-
-async function adminLoadRequests(){
-  const box = $("requestsList");
-  box.innerHTML = `<div class="muted">Memuat request...</div>`;
-
-  try{
-    const snap = await getDocs(query(
-      collection(db, "memberships"),
-      orderBy("createdAt","desc"),
-      limit(25)
-    ));
-
-    if(snap.empty){
-      box.innerHTML = `<div class="muted">Belum ada request.</div>`;
-      return;
-    }
-
-    box.innerHTML = "";
-    for(const d of snap.docs){
-      const m = d.data();
-
-      let planTxt = m.planId;
-      const pSnap = await getDoc(doc(db, "plans", m.planId));
-      if(pSnap.exists()){
-        const p = pSnap.data();
-        planTxt = `${p.name} • ${rupiah(p.price)} • ${p.days} hari`;
+  // wire save photo
+  wrap.querySelectorAll("[data-save]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idx = btn.getAttribute("data-save");
+      const target = document.getElementById(`voucherCapture-${idx}`);
+      const msg = document.getElementById(`vmsg-${idx}`);
+      try {
+        const canvas = await window.html2canvas(target, { scale: 2 });
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        const code = (state.member.vouchers?.[idx]?.code) || "voucher";
+        a.download = `${code}.png`;
+        a.click();
+        msg.textContent = "✅ Gambar voucher tersimpan (download).";
+      } catch (e) {
+        msg.textContent = "❌ Gagal membuat gambar voucher.";
       }
-
-      const until = m.activeUntil?.toDate ? m.activeUntil.toDate() : null;
-      const untilTxt = until ? until.toLocaleString("id-ID") : "—";
-
-      const el = document.createElement("div");
-      el.className = "item";
-      el.innerHTML = `
-        <div class="meta">
-          <div class="title">${escapeHtml(m.email || "—")}</div>
-          <div class="sub">Paket: ${escapeHtml(planTxt)}</div>
-          <div class="sub">Status: ${badge(m.status)} • Aktif sampai: ${escapeHtml(untilTxt)}</div>
-          <div class="sub muted">UID: ${escapeHtml(m.uid || "—")} • ID: ${d.id}</div>
-        </div>
-        <div class="actions">
-          ${m.status === "pending" ? `
-            <button class="btn primary" data-action="approve" data-id="${d.id}" data-planid="${m.planId}">Approve</button>
-            <button class="btn" data-action="reject" data-id="${d.id}">Reject</button>
-          ` : `
-            <button class="btn" data-action="expire" data-id="${d.id}">Set Expired</button>
-          `}
-        </div>
-      `;
-      box.appendChild(el);
-    }
-
-    box.querySelectorAll(`[data-action="approve"]`).forEach(btn => {
-      btn.addEventListener("click", () => adminApprove(btn.dataset.id, btn.dataset.planid));
     });
-    box.querySelectorAll(`[data-action="reject"]`).forEach(btn => {
-      btn.addEventListener("click", () => adminSetStatus(btn.dataset.id, "rejected"));
-    });
-    box.querySelectorAll(`[data-action="expire"]`).forEach(btn => {
-      btn.addEventListener("click", () => adminSetStatus(btn.dataset.id, "expired"));
-    });
-
-  }catch(e){
-    console.error(e);
-    box.innerHTML = `<div class="muted">Gagal memuat request.</div>`;
-    toast("Gagal memuat request.");
-  }
-}
-
-async function adminApprove(membershipId, planId){
-  try{
-    // Ambil durasi dari plan
-    const pSnap = await getDoc(doc(db, "plans", planId));
-    if(!pSnap.exists()){
-      toast("Plan tidak ditemukan.");
-      return;
-    }
-    const p = pSnap.data();
-    const days = Number(p.days || 0);
-
-    // Hitung activeUntil dari sekarang
-    const now = new Date();
-    const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-
-    await updateDoc(doc(db, "memberships", membershipId), {
-      status: "active",
-      activeUntil: until,
-      approvedAt: serverTimestamp(),
-    });
-
-    toast("Membership di-approve.");
-    await adminLoadRequests();
-  }catch(e){
-    console.error(e);
-    toast("Gagal approve.");
-  }
-}
-
-async function adminSetStatus(membershipId, status){
-  try{
-    await updateDoc(doc(db, "memberships", membershipId), {
-      status,
-      updatedAt: serverTimestamp(),
-    });
-    toast("Status diperbarui.");
-    await adminLoadRequests();
-  }catch(e){
-    console.error(e);
-    toast("Gagal update status.");
-  }
+  });
 }
 
 /** =========================
- *  Small utilities
+ *  ADMIN UI
  *  ========================= */
-function slug(s){
-  return String(s)
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9\-]/g, "");
-}
+function renderAdminLogin() {
+  $app.innerHTML = `
+    <div class="card">
+      <div class="h1">Admin Panel</div>
+      <p class="p">Login Google untuk mengakses admin. Hanya <b>${ADMIN_EMAIL}</b> yang bisa masuk.</p>
+      <button class="btn" id="btnGoogle">Login Google</button>
+      <div class="spacer"></div>
+      <div id="msg" class="small"></div>
+    </div>
+  `;
 
-function escapeHtml(str){
-  return String(str ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function badge(status){
-  const map = {
-    pending: "🟡 Pending",
-    active: "🟢 Active",
-    rejected: "🔴 Rejected",
-    expired: "⚪ Expired",
+  document.getElementById("btnGoogle").onclick = async () => {
+    const $msg = document.getElementById("msg");
+    try {
+      const res = await signInWithPopup(auth, provider);
+      if (res.user.email !== ADMIN_EMAIL) {
+        await signOut(auth);
+        $msg.textContent = "❌ Email ini bukan admin.";
+      }
+    } catch (e) {
+      $msg.textContent = "❌ Gagal login.";
+    }
   };
-  return map[status] || escapeHtml(status);
 }
 
- 
+async function renderAdminPanel() {
+  $app.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between; align-items:flex-start">
+        <div>
+          <div class="h1">Admin Panel</div>
+          <p class="p">Kelola pendaftaran, redeem, poin, dan voucher.</p>
+        </div>
+        <a class="badge" href="#">Public mode</a>
+      </div>
+
+      <hr class="sep" />
+
+      <div class="row">
+        <button class="btn secondary" id="refresh">Refresh</button>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="grid">
+        <div class="card">
+          <div style="font-weight:900;font-size:16px">Pending Pendaftaran</div>
+          <div class="spacer"></div>
+          <div id="regList" class="small">Loading...</div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:900;font-size:16px">Pending Redeem</div>
+          <div class="spacer"></div>
+          <div id="redeemList" class="small">Loading...</div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <div class="card">
+        <div style="font-weight:900;font-size:16px">Cari Member (kode)</div>
+        <div class="spacer"></div>
+        <div class="row">
+          <input class="input mono" id="mcode" placeholder="TPGCARD..." style="max-width:320px" />
+          <button class="btn" id="loadMember">Load</button>
+        </div>
+        <div class="spacer"></div>
+        <div id="memberAdminView" class="small"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("refresh").onclick = () => renderAdminPanel();
+  await loadPendingRegistrations();
+  await loadPendingRedeems();
+
+  document.getElementById("loadMember").onclick = async () => {
+    const code = document.getElementById("mcode").value.trim().toUpperCase();
+    const out = document.getElementById("memberAdminView");
+    if (!code) { out.textContent = "Isi kode dulu."; return; }
+
+    const pub = await getDoc(doc(db, "membersPublic", code));
+    if (!pub.exists()) { out.textContent = "MemberPublic tidak ditemukan."; return; }
+
+    const data = pub.data();
+    const vouchers = Array.isArray(data.vouchers) ? data.vouchers : [];
+
+    out.innerHTML = `
+      <div class="voucher-card">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <div style="font-weight:950">Member: <span class="mono">${code}</span></div>
+            <div class="small">${data.name ?? "-"}</div>
+          </div>
+          <span class="badge">Poin: <b>${data.points ?? 0}</b></span>
+        </div>
+
+        <hr class="sep" />
+        <div class="row">
+          <button class="btn secondary" id="pMinus">-10 poin</button>
+          <button class="btn secondary
