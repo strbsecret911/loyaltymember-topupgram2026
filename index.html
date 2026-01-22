@@ -4,9 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TPG Card Membership</title>
+
+  <!-- PASTIKAN NAMA FILE CSS SESUAI -->
+  <!-- Kalau file kamu namanya styles.css → biarkan -->
+  <!-- Kalau namanya style.css → ganti di sini -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <!-- TOPBAR -->
   <div class="topbar">
     <div class="brand">
       <div class="logo">TPG</div>
@@ -15,66 +21,19 @@
         <div class="brand-sub">Membership • Poin • Voucher</div>
       </div>
     </div>
-
     <div class="topbar-right" id="topbarRight"></div>
   </div>
 
+  <!-- APP ROOT (SEMUA UI DI-RENDER OLEH app.js) -->
   <main class="container">
     <div id="app"></div>
   </main>
 
-  <!-- html2canvas for "save as photo" -->
+  <!-- html2canvas (SAVE VOUCHER AS IMAGE) -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-  <!-- Firebase v9 modular (CDN) -->
+  <!-- FIREBASE + APP LOGIC -->
   <script type="module" src="app.js"></script>
-</body>
-</html>          </div>
-          <div>
-            <label>Durasi (hari)</label>
-            <input id="planDays" type="number" min="1" step="1" placeholder="30" />
-          </div>
-        </div>
 
-        <div>
-          <label>Benefit (pisahkan dengan baris baru)</label>
-          <textarea id="planBenefits" rows="4" placeholder="- Diskon 10%&#10;- Priority support"></textarea>
-        </div>
-
-        <div class="row">
-          <button id="btnSavePlan" class="btn primary">Simpan Paket</button>
-          <button id="btnSeedPlans" class="btn">Buat Paket Contoh</button>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="card-head">
-          <h3>Daftar Paket</h3>
-          <button id="btnAdminRefreshPlans" class="btn ghost">Refresh</button>
-        </div>
-        <div id="adminPlans" class="list"></div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>Permintaan Membership</h2>
-          <button id="btnRefreshRequests" class="btn ghost">Refresh</button>
-        </div>
-        <div id="requestsList" class="list"></div>
-      </section>
-    </section>
-
-    <!-- TOAST -->
-    <div id="toast" class="toast hidden"></div>
-  </main>
-
-  <footer class="footer">
-    <span>© <span id="year"></span> Topupgram</span>
-    <span class="dot">•</span>
-    <span class="muted">Powered by Firebase + Firestore</span>
-  </footer>
-
-  <!-- Firebase (v9 modular) -->
-  <script type="module" src="app.js"></script>
 </body>
 </html>
