@@ -1,430 +1,329 @@
+/* =========================
+   ROOT & RESET
+   ========================= */
 :root{
-  /* Topupgram palette */
-  --bg:#ECF2F8;
-  --card:#FFFFFF;
-  --line:#CBDBEC;
-  --text:#1f2d3d;
-  --muted:#6b7c93;
-
-  --primary:#386799;
-  --primary-soft:#C3DDF4;
-
-  --btn:#386799;
-  --btn2:#ECF2F8;
-
-  --bad:#e54848;
-  --ok:#2aa36b;
-  --warn:#e0a800;
-
-  --radius:14px;
-  --shadow: 0 10px 24px rgba(56,103,153,.15);
+  --accent:#4a6fa1;
+  --text:#23314a;
+  --muted:#6b7280;
+  --ok:#14532d;
+  --bad:#7f1d1d;
+  --warn:#92400e;
 }
 
-/* ===== Base ===== */
-*{box-sizing:border-box}
+*{ box-sizing:border-box; }
 
 body{
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background:#f8fafc;
+  color:#111827;
   font-size:13px;
-  line-height:1.45;
-  color:var(--text);
-  background: var(--bg);
 }
 
-/* ===== Topbar ===== */
+a{ text-decoration:none; color:inherit; }
+
+/* =========================
+   TOPBAR
+   ========================= */
 .topbar{
-  position: sticky; top:0; z-index:10;
-  background: rgba(255,255,255,.9);
-  backdrop-filter: blur(10px);
-  border-bottom:1px solid var(--line);
-  padding:10px 14px;
-  display:flex; justify-content:space-between; align-items:center;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 14px;
+  background:#ffffff;
+  border-bottom:1px solid #e5e7eb;
+  position:sticky;
+  top:0;
+  z-index:1000;
 }
 
-.brand{display:flex; align-items:center; gap:10px}
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
 .logo{
-  width:36px;height:36px;border-radius:12px;
-  display:grid;place-items:center;
-  background: linear-gradient(135deg, #386799, #5f8fc9);
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  background:var(--accent);
   color:#fff;
   font-weight:900;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.brand-title{
+  font-weight:800;
   font-size:14px;
 }
-.brand-title{font-weight:900; font-size:15px}
-.brand-sub{color:var(--muted); font-size:11px}
+.brand-sub{
+  font-size:11px;
+  color:var(--muted);
+}
 
-/* ===== Layout ===== */
+.topbar-right{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+
+/* =========================
+   BADGE & BUTTON
+   ========================= */
+.badge{
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  border:1px solid #d1d5db;
+  background:#fff;
+}
+.badge.ok{ color:var(--ok); border-color:#bbf7d0; background:#ecfdf5; }
+.badge.bad{ color:var(--bad); border-color:#fecaca; background:#fef2f2; }
+.badge.warn{ color:var(--warn); border-color:#fde68a; background:#fffbeb; }
+.badge.link{ cursor:pointer; }
+
+button, .btn{
+  background:var(--accent);
+  color:#fff;
+  border:none;
+  border-radius:8px;
+  padding:9px 12px;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+button.secondary, .btn.secondary{
+  background:#e5e7eb;
+  color:#111827;
+}
+button.danger, .btn.danger{
+  background:#ef4444;
+}
+button:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+}
+
+/* =========================
+   LAYOUT
+   ========================= */
 .container{
-  max-width:920px;
-  margin: 14px auto 60px;
-  padding: 0 12px;
+  max-width:520px;
+  margin:0 auto;
+  padding:16px 12px 40px;
 }
 
-/* ===== Cards ===== */
 .card{
-  background:var(--card);
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  box-shadow:var(--shadow);
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
   padding:14px;
+  box-shadow:0 2px 10px rgba(0,0,0,.04);
+  margin-bottom:14px;
 }
+
 .subcard{
-  background:#F9FBFD;
-  border:1px solid var(--line);
+  background:#f9fafb;
+  border:1px dashed #d1d5db;
   border-radius:12px;
   padding:12px;
 }
 
-/* ===== Typography ===== */
-h1{margin:0 0 4px; font-size:20px}
-h2{margin:0 0 4px; font-size:16px}
-h3{margin:0 0 6px; font-size:14px}
-
-.muted{color:var(--muted); margin:6px 0}
-.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
-.code{font-size:15px; font-weight:800; letter-spacing:.3px}
-
-/* ===== Form ===== */
-label{
-  display:block;
-  color:var(--muted);
-  font-size:11px;
-  margin:10px 0 6px;
-}
-.input{
-  width:100%;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:#fff;
-  font-size:13px;
-}
-
-/* ===== Buttons ===== */
-.btn{
-  border:0;
-  cursor:pointer;
-  padding:9px 12px;
-  border-radius:12px;
-  font-weight:800;
-  font-size:12px;
-  background:var(--btn);
-  color:#fff;
-}
-.btn.secondary{
-  background:var(--btn2);
-  color:var(--primary);
-  border:1px solid var(--line);
-}
-.btn.danger{background:var(--bad)}
-.btn:disabled{opacity:.55; cursor:not-allowed}
-
-/* ===== Badges ===== */
-.badge{
-  display:inline-flex; align-items:center;
-  padding:5px 10px;
-  border-radius:999px;
-  border:1px solid var(--line);
-  background:#fff;
-  color:var(--muted);
-  font-size:11px;
-  font-weight:700;
-}
-.badge.ok{color:var(--ok)}
-.badge.bad{color:var(--bad)}
-.badge.warn{color:var(--warn)}
-.badge.link{text-decoration:none}
-
-/* ===== Utilities ===== */
 .row{
   display:flex;
-  gap:10px;
-  flex-wrap:wrap;
+  gap:8px;
   align-items:center;
 }
-.space{justify-content:space-between}
-.grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.row.space{
+  justify-content:space-between;
+}
 
-hr.sep{
-  border:0;
-  border-top:1px solid var(--line);
+.grid2{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.sep{
+  border:none;
+  border-top:1px solid #e5e7eb;
   margin:12px 0;
 }
 
-/* ===== Key-Value ===== */
-.kv{
-  display:grid;
-  grid-template-columns:120px 1fr;
-  gap:8px 10px;
-  font-size:12px;
-  margin-top:4px;
+/* =========================
+   FORM
+   ========================= */
+label{
+  font-size:11px;
+  font-weight:600;
+  display:block;
+  margin-top:8px;
 }
-.kv .k{color:var(--muted)}
-.kv .v{font-weight:800}
+input, select{
+  width:100%;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid #d1d5db;
+  font-size:12px;
+}
+input.mono{ font-family:monospace; }
 
-/* ===== Tabs ===== */
+/* =========================
+   MEMBERSHIP
+   ========================= */
 .tabs{
   display:flex;
-  gap:8px;
-  margin-top:12px;
-  flex-wrap:wrap;
+  gap:6px;
+  margin-top:10px;
 }
 .tab{
-  border:1px solid var(--line);
-  background:#fff;
-  color:var(--muted);
-  padding:8px 12px;
+  flex:1;
+  padding:6px;
   border-radius:999px;
-  font-weight:900;
+  border:1px solid #d1d5db;
+  background:#fff;
   font-size:11px;
   cursor:pointer;
 }
 .tab.active{
-  background:var(--primary-soft);
-  color:var(--primary);
-  border-color:var(--primary);
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
 }
 
-/* ===== Table ===== */
-.table{width:100%; border-collapse:collapse; font-size:12px}
-.table th,.table td{
-  border-bottom:1px solid var(--line);
-  padding:9px 7px;
-  text-align:left;
-}
-.table th{
-  color:var(--muted);
-  font-weight:900;
-}
-
-/* ===== Note box (landing catatan) ===== */
-.note{
-  margin-top:12px;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  background:#F9FBFD;
-}
-
-/* ===== Mini info list (landing rules) ===== */
-.mini{
-  margin-top:12px;
+.kv{
   display:grid;
-  gap:10px;
-}
-.mini > div{
-  display:grid;
-  grid-template-columns: auto 1fr;
-  gap:10px;
-  align-items:center;
-  padding:10px 12px;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background:#fff;
-}
-.mini .badge{
-  background: var(--btn2);
-  color: var(--primary);
-  border-color: var(--line);
-  font-weight:900;
-}
-
-/* ===== Capture ===== */
-.captureWrap{
-  position:absolute;
-  left:-9999px;
-  top:-9999px;
-}
-.capture{width:480px}
-.capTitle{font-size:16px; font-weight:900}
-
-/* ===== iOS Modal (Light) ===== */
-.ios-backdrop{
-  position:fixed; inset:0;
-  background:rgba(0,0,0,.35);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding:18px;
-  z-index:9999;
-}
-.ios-backdrop.hidden{display:none}
-
-.ios-sheet{
-  width:min(380px,92vw);
-  background:#fff;
-  border-radius:16px;
-  box-shadow:0 20px 50px rgba(0,0,0,.25);
-  overflow:hidden;
-}
-.ios-head{
-  padding:14px 14px 8px;
-  text-align:center;
-}
-.ios-title{
-  font-size:15px;
-  font-weight:900;
-  color:#111;
-}
-.ios-msg{
-  font-size:12px;
-  color:#555;
-  margin-top:6px;
-  line-height:1.35;
-}
-
-.ios-inputWrap{padding:0 14px 12px}
-.ios-input{
-  width:100%;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid var(--line);
-  font-size:13px;
-}
-
-.ios-actions{
-  display:flex;
-  border-top:1px solid var(--line);
-}
-.ios-btn{
-  flex:1;
-  padding:12px 10px;
-  font-size:13px;
-  font-weight:800;
-  background:none;
-  border:0;
-  cursor:pointer;
-}
-.ios-btn + .ios-btn{border-left:1px solid var(--line)}
-.ios-ok{color:var(--primary)}
-.ios-danger{color:var(--bad)}
-
-/* =========================
-   MOBILE polish (tanpa bikin tombol jadi full width)
-   ========================= */
-@media (max-width: 520px){
-
-  /* spacing card di hp biar nggak mepet */
-  .card{ padding:14px; }
-  .subcard{ padding:12px; }
-
-  /* jarak antar elemen di dalam card */
-  .row{ gap:10px; }
-
-  /* form: input tetap full, tombol tetap normal (kecuali button utama tertentu) */
-  .input{ padding:11px 12px; border-radius:14px; }
-
-  /* tombol utama tertentu kita bikin full biar rapi (Cari / Kirim Permintaan / Kirim Redeem) */
-  #search,
-  #submit,
-  #sendRedeem{
-    width:100%;
-    justify-content:center;
-    padding:11px 12px;
-    border-radius:14px;
-  }
-
-  /* tombol "Kembali" yang secondary juga enak full */
-  #back,
-  #logout{
-    width:100%;
-    justify-content:center;
-  }
-
-  /* badges di member card jangan “kepanjangan” */
-  .badge{ padding:6px 10px; }
-
-  /* mini list landing tetap rapi */
-  .mini > div{
-    padding:10px 12px;
-    border-radius:14px;
-  }
-
-  /* redeem preview / msg box kalau ada */
-  #redeemPreview,
-  #redeemMsg{
-    margin-top:10px;
-  }
-}
-
-/* kalau ada elemen pesan redeem yang kamu jadikan box (opsional, aman walau id gak ada) */
-#redeemMsg{
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px dashed var(--line);
-  background:#fff;
-}
-
-/* ===== Redeem panel spacing fix (biar nggak mepet) ===== */
-
-/* Semua subcard: kasih jarak antar blok */
-.subcard > * + *{
-  margin-top: 10px;
-}
-
-/* Judul subcard jangan terlalu nempel */
-.subcard h3{
-  margin:0;
-  padding:0;
-}
-
-/* Paragraf muted di subcard lebih rapih */
-.subcard .muted{
-  margin:0;
-}
-
-/* Label + input jaraknya konsisten */
-.subcard label{
-  margin:0;
+  grid-template-columns:110px 1fr;
+  gap:6px 10px;
   font-size:11px;
 }
-.subcard .input{
-  margin-top:6px;
+.k{ color:var(--muted); }
+.v{ font-weight:600; }
+
+.code{
+  font-family:monospace;
+  font-size:13px;
+  font-weight:800;
 }
 
-/* Tombol di panel redeem kasih jarak & tinggi nyaman */
-#sendRedeem{
-  margin-top: 8px;
+/* =========================
+   ORDER PAGE
+   ========================= */
+.category{
+  margin-bottom:14px;
+}
+.category h3{
+  margin:0 0 6px;
+  font-size:13px;
 }
 
-/* Pesan/error box redeem jangan mepet & keliatan sebagai box */
-#redeemMsg{
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px dashed var(--line);
-  background: #fff;
+.prcContainer{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.bc{
+  border:1px solid #d1d5db;
+  background:#fff;
+  border-radius:10px;
+  padding:10px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:700;
+}
+.bc span{
+  display:block;
+  font-size:11px;
+  color:var(--muted);
+  margin-top:4px;
 }
 
-/* Kalau pesan kosong, jangan makan tempat (opsional) */
-#redeemMsg:empty{
+/* =========================
+   ORDER FORM
+   ========================= */
+.form-container{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:14px;
+  padding:14px;
+  margin-top:14px;
+}
+
+/* =========================
+   PAYMENT MODAL
+   ========================= */
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
   display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+.modal{
+  width:320px;
+  max-width:92%;
+  background:#fff;
+  border-radius:14px;
+  padding:16px;
+  text-align:center;
+}
+.modal .qr{
+  width:180px;
+  height:180px;
+  border-radius:10px;
+  border:1px solid #e5e7eb;
+  margin:10px auto;
+}
+.modal .amount{
+  font-size:18px;
+  font-weight:900;
+  color:#1b3b6f;
 }
 
-/* ===== Lookup / Login spacing fix ===== */
-
-/* Input + tombol Cari jangan nempel */
-.input + .btn{
-  margin-top: 12px;
+/* =========================
+   VALIDATION POPUP
+   ========================= */
+.validation-center{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  z-index:11000;
+  width:320px;
+  max-width:92%;
+  background:#fff;
+  border-radius:14px;
+  padding:14px;
+  box-shadow:0 12px 40px rgba(0,0,0,.25);
+}
+.validation-center .hdr{
+  font-weight:900;
+}
+.validation-center .txt{
+  font-weight:700;
+  margin-top:8px;
+}
+.validation-center .okbtn{
+  margin-top:12px;
+  width:100%;
 }
 
-/* Tombol full-width khusus halaman public (Masuk / Daftar) */
-.card .btn{
-  width: 100%;
+/* =========================
+   ADMIN TABLE
+   ========================= */
+.table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px;
 }
-
-/* Tapi jangan ganggu tombol kecil di admin / voucher */
-.row .btn{
-  width: auto;
-}
-
-/* Tombol Cari & Kirim lebih empuk di mobile */
-@media (max-width: 520px){
-  .card .btn{
-    padding: 12px;
-    border-radius: 14px;
-    font-size: 13px;
-  }
+.table th, .table td{
+  border-bottom:1px solid #e5e7eb;
+  padding:6px;
+  text-align:left;
 }
