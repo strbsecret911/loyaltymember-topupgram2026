@@ -166,3 +166,76 @@ hr.sep{border:0; border-top:1px solid var(--line); margin:14px 0}
 }
 .capture{width: 520px}
 .capTitle{font-size: 20px; font-weight: 950}
+
+/* ===== iOS-like Modal ===== */
+.ios-backdrop{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  z-index:9999;
+}
+.ios-backdrop.hidden{ display:none; }
+
+.ios-sheet{
+  width:min(420px, 92vw);
+  background:rgba(255,255,255,.92);
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border:1px solid rgba(255,255,255,.35);
+}
+.ios-head{
+  padding:18px 16px 10px;
+  text-align:center;
+}
+.ios-title{
+  font-weight:800;
+  font-size:18px;
+  letter-spacing:.2px;
+  color:#111;
+}
+.ios-msg{
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.35;
+  color:rgba(0,0,0,.72);
+}
+
+.ios-inputWrap{
+  padding: 0 16px 14px;
+}
+.ios-inputWrap.hidden{ display:none; }
+
+.ios-input{
+  width:100%;
+  padding:12px 12px;
+  border-radius:12px;
+  border:1px solid rgba(0,0,0,.18);
+  outline:none;
+  font-size:16px;
+  background:rgba(255,255,255,.9);
+}
+
+.ios-actions{
+  display:flex;
+  border-top:1px solid rgba(0,0,0,.12);
+}
+.ios-btn{
+  flex:1;
+  padding:14px 10px;
+  font-weight:700;
+  background:transparent;
+  border:0;
+  cursor:pointer;
+  font-size:16px;
+}
+.ios-btn + .ios-btn{
+  border-left:1px solid rgba(0,0,0,.12);
+}
+.ios-ok{ color:#007aff; }
+.ios-danger{ color:#ff3b30; }
