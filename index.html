@@ -3,11 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TPG Card Membership</title>
+  <title>TOPUPGRAM • Order & Membership</title>
 
-  <!-- PASTIKAN NAMA FILE CSS SESUAI -->
-  <!-- Kalau file kamu namanya styles.css → biarkan -->
-  <!-- Kalau namanya style.css → ganti di sini -->
+  <!-- CSS utama membership (yang sudah kamu punya) -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -17,14 +15,21 @@
     <div class="brand">
       <div class="logo">TPG</div>
       <div>
-        <div class="brand-title">TOPUPGRAM MEMBERSHIP</div>
-        <div class="brand-sub">Membership • Poin • Voucher</div>
+        <div class="brand-title">TOPUPGRAM</div>
+        <div class="brand-sub">Order • Membership • Voucher</div>
       </div>
     </div>
-    <div class="topbar-right" id="topbarRight"></div>
+
+    <!-- NAV KANAN: Order / Membership / Admin -->
+    <div class="topbar-right" id="topbarRight">
+      <!-- Diisi juga oleh app.js (setTopbar), tapi defaultnya kita kasih tombol cepat -->
+      <a class="badge link" href="#order" title="Buka halaman Order">Order</a>
+      <a class="badge link" href="#membership" title="Buka halaman Membership">Membership</a>
+      <a class="badge link" href="#admin" title="Admin Panel">Admin</a>
+    </div>
   </div>
 
-  <!-- APP ROOT (SEMUA UI DI-RENDER OLEH app.js) -->
+  <!-- ROOT APP (SEMUA UI DI-RENDER OLEH app.js) -->
   <main class="container">
     <div id="app"></div>
   </main>
@@ -32,7 +37,7 @@
   <!-- html2canvas (SAVE VOUCHER AS IMAGE) -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-  <!-- FIREBASE + APP LOGIC -->
+  <!-- APP LOGIC -->
   <script type="module" src="app.js"></script>
 
 </body>
