@@ -1,5 +1,5 @@
 /* ===============================
-   TPG Card Membership – FINAL (No Index Needed)
+   TPG Card Membership – FINAL (No Index Needed) + PIN Gate
    =============================== */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
@@ -46,6 +46,10 @@ const REDEEM_MIN = 100;
 const REDEEM_MAX = 400;
 const DISCOUNT_PER_POINT_RP = 10; // 1 poin = Rp10 => 100 poin = Rp1000
 
+/** PIN rules */
+const PIN_MIN_LEN = 4;
+const PIN_MAX_LEN = 8;
+
 /** =========================
  * INIT
  * ========================= */
@@ -65,7 +69,10 @@ const state = {
   publicView: "landing", // landing | register | lookup | member
   memberCode: "",
   member: null,
-  memberTab: "vouchers" // vouchers | redeem
+  memberTab: "vouchers", // vouchers | redeem
+
+  // PIN gate
+  memberUnlocked: false
 };
 
 /** =========================
@@ -236,6 +243,70 @@ function clampRedeemPoints(raw) {
 }
 
 /** =========================
+ * PIN Gate Helpers
+ * ========================= */
+function sessionKey(memberCode){ return `tpg:unlocked:${String(memberCode||"").toUpperCase()}`; }
+
+function clampPin(pinRaw) {
+  const pin = String(pinRaw ?? "").trim();
+  if (!pin) return null;
+  if (pin.length < PIN_MIN_LEN || pin.length > PIN_MAX_LEN) return null;
+  // boleh angka saja (kamu bisa longgarkan kalau mau)
+  if (!/^\d+$/.test(pin)) return null;
+  return pin;
+}
+
+async function sha256Hex(str) {
+  const enc = new TextEncoder().encode(String(str ?? ""));
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+async function ensureMemberUnlocked() {
+  if (state.memberUnlocked) return true;
+
+  // refresh memberPublic biar pinHash terbaru kebaca
+  await reloadMemberPublic();
+  const m = state.member || {};
+  const pinHashPublic = m.pinHash || m.pin_hash || null;
+
+  if (!pinHashPublic) {
+    await iosAlert("Terkunci", "PIN belum diset untuk member ini. Hubungi admin.");
+    return false;
+  }
+
+  const pinInput = await iosPrompt(
+    "PIN Member",
+    `Masukkan PIN (${PIN_MIN_LEN}-${PIN_MAX_LEN} digit) untuk membuka Voucher & Redeem:`,
+    "contoh: 1234"
+  );
+  if (pinInput === null) return false;
+
+  const pin = clampPin(pinInput);
+  if (!pin) {
+    await iosAlert("Gagal", `PIN harus ${PIN_MIN_LEN}-${PIN_MAX_LEN} digit angka.`);
+    return false;
+  }
+
+  const hash = await sha256Hex(pin);
+  if (hash !== pinHashPublic) {
+    await iosAlert("Gagal", "PIN salah.");
+    return false;
+  }
+
+  state.memberUnlocked = true;
+  try { sessionStorage.setItem(sessionKey(state.memberCode), "1"); } catch {}
+  return true;
+}
+
+function resetMemberUnlockState(clearSession=false) {
+  state.memberUnlocked = false;
+  if (clearSession) {
+    try { sessionStorage.removeItem(sessionKey(state.memberCode)); } catch {}
+  }
+}
+
+/** =========================
  * PUBLIC UI
  * ========================= */
 function renderPublicLanding() {
@@ -345,6 +416,10 @@ function renderPublicLookup() {
     state.member = snap.data();
     state.publicView = "member";
     state.memberTab = "vouchers";
+
+    // restore unlock state (per session)
+    try { state.memberUnlocked = sessionStorage.getItem(sessionKey(code)) === "1"; } catch { state.memberUnlocked = false; }
+
     render();
   };
 }
@@ -361,6 +436,7 @@ function renderMemberPage() {
           <div class="row">
             <span class="badge ${membershipExpired ? "bad" : "ok"}">${membershipExpired ? "Membership Kadaluarsa" : "Membership Aktif"}</span>
             <span class="badge">Poin: <b>${escapeHtml(m.points ?? 0)}</b></span>
+            <span class="badge ${state.memberUnlocked ? "ok" : "warn"}">${state.memberUnlocked ? "Voucher Terbuka" : "Voucher Terkunci"}</span>
           </div>
         </div>
         <button class="btn secondary" id="logout">Kembali</button>
@@ -378,6 +454,7 @@ function renderMemberPage() {
       <div class="tabs">
         <button class="tab ${state.memberTab==="vouchers"?"active":""}" id="tabV">Voucher Saya</button>
         <button class="tab ${state.memberTab==="redeem"?"active":""}" id="tabR">Redeem</button>
+        <button class="tab" id="tabUnlock">${state.memberUnlocked ? "Kunci" : "Buka (PIN)"}</button>
         <button class="tab" id="tabRefresh">Refresh</button>
       </div>
 
@@ -386,14 +463,34 @@ function renderMemberPage() {
   `;
 
   document.getElementById("logout").onclick = () => {
+    // reset + clear session unlock for privacy
+    resetMemberUnlockState(true);
     state.member = null;
     state.memberCode = "";
     state.publicView = "lookup";
     render();
   };
 
-  document.getElementById("tabV").onclick = () => { state.memberTab="vouchers"; renderMemberTab(); };
-  document.getElementById("tabR").onclick = () => { state.memberTab="redeem"; renderMemberTab(); };
+  document.getElementById("tabV").onclick = async () => {
+    const ok = await ensureMemberUnlocked();
+    if (!ok) { state.memberTab = "vouchers"; renderMemberTab(); return; }
+    state.memberTab="vouchers"; renderMemberTab();
+  };
+  document.getElementById("tabR").onclick = async () => {
+    const ok = await ensureMemberUnlocked();
+    if (!ok) { state.memberTab = "redeem"; renderMemberTab(); return; }
+    state.memberTab="redeem"; renderMemberTab();
+  };
+  document.getElementById("tabUnlock").onclick = async () => {
+    if (state.memberUnlocked) {
+      resetMemberUnlockState(true);
+      await iosAlert("Terkunci", "Voucher & Redeem dikunci lagi.");
+      renderMemberPage();
+      return;
+    }
+    const ok = await ensureMemberUnlocked();
+    if (ok) renderMemberPage();
+  };
   document.getElementById("tabRefresh").onclick = async () => { await reloadMemberPublic(); renderMemberPage(); };
 
   renderMemberTab();
@@ -406,6 +503,27 @@ async function renderMemberTab() {
 
   await reloadMemberPublic();
   const m = state.member;
+
+  // PIN gate: voucher & redeem hanya kalau unlocked
+  if (!state.memberUnlocked) {
+    wrap.innerHTML = `
+      <div class="subcard">
+        <h3>🔒 Terkunci</h3>
+        <p class="muted">Voucher & Redeem hanya bisa dibuka dengan PIN.</p>
+        <div class="row">
+          <button class="btn" id="btnEnterPin">Masukkan PIN</button>
+        </div>
+        <p class="muted" style="margin-top:10px">
+          Kamu tetap bisa lihat info member (nama, poin, masa berlaku) tanpa PIN.
+        </p>
+      </div>
+    `;
+    document.getElementById("btnEnterPin")?.addEventListener("click", async () => {
+      const ok = await ensureMemberUnlocked();
+      if (ok) renderMemberPage();
+    });
+    return;
+  }
 
   if (state.memberTab === "redeem") {
     const membershipExpired = nowMs() > tsMs(m.expiresAt);
@@ -681,17 +799,21 @@ async function renderAdminPanel() {
     const privData = priv.data();
     const vouchers = Array.isArray(pubData.vouchers) ? pubData.vouchers : [];
 
+    const hasPin = !!(privData.pinHash || pubData.pinHash);
+
     out.innerHTML = `
       <div class="kv">
         <div class="k">Nama</div><div class="v">${escapeHtml(pubData.name ?? "-")}</div>
         <div class="k">Kode</div><div class="v mono">${escapeHtml(code)}</div>
         <div class="k">Poin</div><div class="v"><b>${escapeHtml(pubData.points ?? 0)}</b></div>
         <div class="k">Expired</div><div class="v">${fmtDate(privData.expiresAt)}</div>
+        <div class="k">PIN</div><div class="v">${hasPin ? `<span class="badge ok">SET</span>` : `<span class="badge warn">BELUM</span>`}</div>
       </div>
 
       <div class="row" style="margin-top:10px">
         <button class="btn secondary" id="pMinus">-10 poin</button>
         <button class="btn secondary" id="pPlus">+10 poin</button>
+        <button class="btn" id="resetPin">Set/Reset PIN</button>
       </div>
 
       <hr class="sep" />
@@ -704,6 +826,25 @@ async function renderAdminPanel() {
 
     document.getElementById("pMinus").onclick = async () => { await updatePoints(code, -10); document.getElementById("loadMember").click(); };
     document.getElementById("pPlus").onclick  = async () => { await updatePoints(code, +10); document.getElementById("loadMember").click(); };
+
+    document.getElementById("resetPin").onclick = async () => {
+      const pinInput = await iosPrompt(
+        "Set/Reset PIN",
+        `Masukkan PIN baru (${PIN_MIN_LEN}-${PIN_MAX_LEN} digit angka):`,
+        "contoh: 1234"
+      );
+      if (pinInput === null) return;
+      const pin = clampPin(pinInput);
+      if (!pin) {
+        await iosAlert("Gagal", `PIN harus ${PIN_MIN_LEN}-${PIN_MAX_LEN} digit angka.`);
+        return;
+      }
+      const pinHash = await sha256Hex(pin);
+      await updateDoc(doc(db, "members", code), { pinHash });
+      await updateDoc(doc(db, "membersPublic", code), { pinHash, hasPin: true });
+      await iosAlert("Berhasil", "PIN berhasil diset.");
+      document.getElementById("loadMember").click();
+    };
 
     const vwrap = document.getElementById("voucherAdminList");
     if (vouchers.length === 0) {
@@ -831,6 +972,20 @@ async function approveRegistration(requestId) {
   );
   if (!telegramId) return;
 
+  // ✅ set PIN saat ACC
+  const pinInput = await iosPrompt(
+    "Set PIN Member",
+    `Buat PIN (${PIN_MIN_LEN}-${PIN_MAX_LEN} digit angka). Nanti kamu kasih PIN ini ke member via chat pribadi.`,
+    "contoh: 1234"
+  );
+  if (pinInput === null) return;
+  const pin = clampPin(pinInput);
+  if (!pin) {
+    await iosAlert("Gagal", `PIN harus ${PIN_MIN_LEN}-${PIN_MAX_LEN} digit angka.`);
+    return;
+  }
+  const pinHash = await sha256Hex(pin);
+
   const memberCode = `TPGCARD${String(telegramId).trim()}`;
   const approvedAt = new Date();
   const expiresAt = new Date(approvedAt.getTime());
@@ -845,7 +1000,8 @@ async function approveRegistration(requestId) {
     telegramId: String(telegramId).trim(),
     approvedAt,
     expiresAt,
-    points: 0
+    points: 0,
+    pinHash
   });
 
   await setDoc(doc(db, "membersPublic", memberCode), {
@@ -854,7 +1010,11 @@ async function approveRegistration(requestId) {
     approvedAt,
     expiresAt,
     points: 0,
-    vouchers: []
+    vouchers: [],
+    hasPin: true,
+    // NOTE: pinHash disimpan di public untuk verifikasi PIN di UI public.
+    // Kalau nanti mau lebih aman, pindahkan verifikasi ke Cloud Function.
+    pinHash
   });
 
   await updateDoc(reqRef, {
@@ -863,6 +1023,8 @@ async function approveRegistration(requestId) {
     telegramId: String(telegramId).trim(),
     memberCode
   });
+
+  await iosAlert("Berhasil", "Member di-ACC & PIN terset. Berikan PIN ke member via chat pribadi.");
 }
 
 /** ✅ NO orderBy to avoid composite index */
