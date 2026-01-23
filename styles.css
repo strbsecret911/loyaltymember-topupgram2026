@@ -254,3 +254,107 @@ hr.sep{
 .ios-btn + .ios-btn{border-left:1px solid var(--line)}
 .ios-ok{color:var(--primary)}
 .ios-danger{color:var(--bad)}
+
+/* =========================
+   DESIGN FIX (mobile & rapi)
+   tempel di PALING BAWAH styles.css
+   ========================= */
+
+/* 1) Landing info list (yang dilingkari di landing) */
+.mini{
+  display:grid;
+  gap:10px;
+  margin-top:12px;
+}
+
+.mini > div{
+  display:grid;
+  grid-template-columns: 74px 1fr;
+  gap:10px;
+  align-items:center;
+  padding:8px 10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background: #F9FBFD;
+}
+
+.mini .badge{
+  justify-content:center;
+  width:100%;
+  background: var(--btn2);
+  color: var(--primary);
+  border-color: var(--line);
+  font-weight:800;
+}
+
+/* 2) Form rapih: input + tombol lebih enak di mobile */
+.row{
+  width:100%;
+}
+
+.row > .input{
+  flex:1;
+  min-width: 220px;
+}
+
+.row > .btn{
+  white-space:nowrap;
+}
+
+/* default: tombol primary biar konsisten tinggi */
+.btn{
+  line-height: 1;
+}
+
+/* Mobile: tombol jadi full width biar ga “nanggung” (Cari / Kirim Redeem) */
+@media (max-width: 520px){
+  .row{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .row > .btn,
+  .row > .input{
+    width:100%;
+    min-width: 0;
+  }
+}
+
+/* 3) Redeem panel (yang dilingkari di member) */
+#memberTabContent .subcard{
+  border-radius:14px;
+}
+
+/* rapihin teks + jarak di redeem */
+#memberTabContent .subcard h3{
+  margin-bottom:6px;
+}
+
+#redeemPoints{
+  margin-top:2px;
+}
+
+/* tombol redeem full dan rapi */
+#sendRedeem{
+  width:100%;
+  padding:10px 12px;
+  font-size:12px;
+  border-radius:12px;
+}
+
+/* preview text biar keliatan “card note”, nggak ngegantung */
+#redeemPreview{
+  margin-top:10px !important;
+  padding:8px 10px;
+  border:1px dashed var(--line);
+  border-radius:12px;
+  background:#fff;
+}
+
+/* 4) Tabs biar ga kepotong & wrap cantik */
+.tabs{
+  flex-wrap:wrap;
+}
+
+.tab{
+  flex:0 0 auto;
+}
