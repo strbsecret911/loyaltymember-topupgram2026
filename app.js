@@ -254,13 +254,6 @@ function renderPublicLanding() {
       <div class="note">
         <b>Catatan:</b> Daftar jika belum punya "Member code". Masuk jika sudah pernah daftar.
       </div>
-
-      <div class="mini" style="margin-top:12px">
-        <div>${badge("Redeem")}&nbsp; Minimal <b>${REDEEM_MIN}</b> poin • Maksimal <b>${REDEEM_MAX}</b> poin</div>
-        <div>${badge("Diskon")}&nbsp; 1 poin = <b>Rp10</b> (100 poin = Rp1.000)</div>
-        <div>${badge("Voucher")}&nbsp; Format <span class="mono">TPG&lt;POIN&gt;VCMEM&lt;RANDOM5&gt;</span></div>
-        <div>${badge("Masa berlaku")}&nbsp; 1 minggu setelah ACC admin</div>
-      </div>
     </div>
   `;
 
@@ -283,10 +276,10 @@ function renderPublicRegister() {
       <input class="input" id="name" placeholder="Contoh: Aly" />
 
       <label>Username Telegram</label>
-      <input class="input" id="tg" placeholder="Contoh: @heiart" />
+      <input class="input" id="tg" placeholder="Username wajib sama dengan yang digunakan untuk start bot @topupgamesbot" />
 
       <div class="row">
-        <button class="btn" id="submit">Kirim Permintaan</button>
+        <button class="btn" id="submit">Ajukan Pendaftaran</button>
       </div>
 
       <p id="msg" class="muted"></p>
@@ -328,7 +321,7 @@ function renderPublicLookup() {
         <button class="btn secondary" id="back">Kembali</button>
       </div>
 
-      <label>Kode Membership</label>
+      <label>Kode/ID Membership</label>
       <input class="input mono" id="code" placeholder="TPGCARD12345" />
 
       <div class="row">
@@ -478,7 +471,7 @@ async function renderMemberTab() {
         return;
       }
       if ((m.points ?? 0) < spend) {
-        $msg.textContent = "❌ Poin kamu tidak cukup untuk jumlah redeem itu.";
+        $msg.textContent = "❌ Poin kamu tidak cukup untuk jumlah redeem.";
         return;
       }
 
@@ -489,10 +482,10 @@ async function renderMemberTab() {
           status: "pending",
           createdAt: serverTimestamp()
         });
-        $msg.textContent = "✅ Permintaan redeem terkirim. Mohon tunggu admin ACC, lalu tekan Refresh.";
+        $msg.textContent = "✅ Permintaan berhasil. Mohon tunggu & tekan Refresh secara berkala.";
         $btn.disabled = true;
       } catch (e) {
-        $msg.textContent = "❌ Gagal kirim redeem (permission denied / rules).";
+        $msg.textContent = "❌ Gagal kirim redeem (permission denied).";
       }
     });
 
@@ -530,7 +523,7 @@ async function renderMemberTab() {
           </div>
 
           <div class="kv">
-            <div class="k">ACC</div><div class="v">${fmtDate(v.approvedAt)}</div>
+            <div class="k">Berlaku mulai</div><div class="v">${fmtDate(v.approvedAt)}</div>
             <div class="k">Berlaku sampai</div><div class="v">${fmtDate(v.expiresAt)}</div>
           </div>
 
