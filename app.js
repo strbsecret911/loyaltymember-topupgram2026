@@ -41,6 +41,11 @@ const firebaseConfig = {
 
 const ADMIN_EMAIL = "dinijanuari23@gmail.com";
 
+/** Redeem rules */
+const REDEEM_MIN = 100;
+const REDEEM_MAX = 400;
+const DISCOUNT_PER_POINT_RP = 10; // 1 poin = Rp10 => 100 poin = Rp1000
+
 /** =========================
  * INIT
  * ========================= */
@@ -88,6 +93,11 @@ function fmtDate(ts) {
 function nowMs(){ return Date.now(); }
 function tsMs(ts){ return ts?.toMillis ? ts.toMillis() : (ts ? new Date(ts).getTime() : 0); }
 
+function rupiah(n){
+  const v = Number(n ?? 0);
+  return v.toLocaleString("id-ID");
+}
+
 function badge(status) {
   return `<span class="badge">${escapeHtml(status)}</span>`;
 }
@@ -110,7 +120,7 @@ function setTopbar() {
   document.getElementById("btnLogout")?.addEventListener("click", () => signOut(auth));
 }
 
-/** ✅ FIX: reload memberPublic supaya status voucher update (used/delete) kebaca di member UI */
+/** ✅ reload memberPublic supaya status voucher update (used/delete) kebaca di member UI */
 async function reloadMemberPublic() {
   if (!state.memberCode) return;
   const snap = await getDoc(doc(db, "membersPublic", state.memberCode));
@@ -217,6 +227,14 @@ async function iosPrompt(title, message, placeholder="", okText="OK", cancelText
   return res.value;
 }
 
+function clampRedeemPoints(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  if (i < REDEEM_MIN || i > REDEEM_MAX) return null;
+  return i;
+}
+
 /** =========================
  * PUBLIC UI
  * ========================= */
@@ -235,6 +253,13 @@ function renderPublicLanding() {
 
       <div class="note">
         <b>Catatan:</b> Daftar jika belum punya "Member code". Masuk jika sudah pernah daftar.
+      </div>
+
+      <div class="mini" style="margin-top:12px">
+        <div>${badge("Redeem")}&nbsp; Minimal <b>${REDEEM_MIN}</b> poin • Maksimal <b>${REDEEM_MAX}</b> poin</div>
+        <div>${badge("Diskon")}&nbsp; 1 poin = <b>Rp10</b> (100 poin = Rp1.000)</div>
+        <div>${badge("Voucher")}&nbsp; Format <span class="mono">TPG&lt;POIN&gt;VCMEM&lt;RANDOM5&gt;</span></div>
+        <div>${badge("Masa berlaku")}&nbsp; 1 minggu setelah ACC admin</div>
       </div>
     </div>
   `;
@@ -345,7 +370,7 @@ function renderMemberPage() {
             <span class="badge">Poin: <b>${escapeHtml(m.points ?? 0)}</b></span>
           </div>
         </div>
-        <button class="btn secondary" id="logout">Ganti Kode</button>
+        <button class="btn secondary" id="logout">Kembali</button>
       </div>
 
       <hr class="sep" />
@@ -381,7 +406,7 @@ function renderMemberPage() {
   renderMemberTab();
 }
 
-/** ✅ FIX: bikin async + reload memberPublic sebelum render voucher list */
+/** ✅ async + reload memberPublic sebelum render voucher list */
 async function renderMemberTab() {
   const wrap = document.getElementById("memberTabContent");
   if (!wrap) return;
@@ -392,38 +417,82 @@ async function renderMemberTab() {
   if (state.memberTab === "redeem") {
     const membershipExpired = nowMs() > tsMs(m.expiresAt);
     const points = m.points ?? 0;
-    const canRedeem = !membershipExpired && points >= 100;
+
+    const defaultSpend = Math.min(REDEEM_MAX, Math.max(REDEEM_MIN, Math.min(points, REDEEM_MIN)));
+    const canRedeemAny = !membershipExpired && points >= REDEEM_MIN;
 
     wrap.innerHTML = `
       <div class="subcard">
         <h3>Redeem Voucher</h3>
-        <p class="muted">Minimal 100 poin → diskon Rp1.000.</p>
+        <p class="muted">
+          Minimal <b>${REDEEM_MIN}</b> poin, maksimal <b>${REDEEM_MAX}</b> poin.
+          Diskon = poin × Rp${DISCOUNT_PER_POINT_RP}.
+        </p>
 
-        <div class="row">
-          <button class="btn" id="sendRedeem" ${canRedeem ? "" : "disabled"}>
-            Kirim Permintaan Redeem (100 poin)
+        <label>Jumlah poin yang mau diredeem</label>
+        <input class="input" id="redeemPoints" type="number" min="${REDEEM_MIN}" max="${REDEEM_MAX}" step="1" value="${defaultSpend}" />
+
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="sendRedeem" ${canRedeemAny ? "" : "disabled"}>
+            Kirim Permintaan Redeem
           </button>
         </div>
 
-        <p class="muted" id="redeemMsg">
-          ${membershipExpired ? "❌ Membership sudah kadaluarsa." : (points < 100 ? "❌ Poin belum cukup (minimal 100)." : "")}
-        </p>
+        <p class="muted" id="redeemPreview" style="margin-top:10px"></p>
+        <p class="muted" id="redeemMsg"></p>
       </div>
     `;
 
-    document.getElementById("sendRedeem")?.addEventListener("click", async () => {
-      const $msg = document.getElementById("redeemMsg");
+    const $pts = document.getElementById("redeemPoints");
+    const $prev = document.getElementById("redeemPreview");
+    const $msg = document.getElementById("redeemMsg");
+    const $btn = document.getElementById("sendRedeem");
+
+    function updatePreview() {
+      const spend = clampRedeemPoints($pts.value);
+      if (!canRedeemAny) {
+        $prev.textContent = membershipExpired ? "❌ Membership sudah kadaluarsa." : `❌ Poin belum cukup (minimal ${REDEEM_MIN}).`;
+        return;
+      }
+      if (spend === null) {
+        $prev.textContent = `Masukkan angka ${REDEEM_MIN}–${REDEEM_MAX}.`;
+        return;
+      }
+      const disc = spend * DISCOUNT_PER_POINT_RP;
+      $prev.textContent = `Preview: Redeem ${spend} poin → diskon Rp${rupiah(disc)} (kode: TPG${spend}VCMEMxxxxx)`;
+    }
+
+    $pts.addEventListener("input", updatePreview);
+    updatePreview();
+
+    $btn?.addEventListener("click", async () => {
+      $msg.textContent = "";
+
+      const spend = clampRedeemPoints($pts.value);
+      if (spend === null) {
+        $msg.textContent = `❌ Jumlah redeem harus ${REDEEM_MIN}–${REDEEM_MAX} poin.`;
+        return;
+      }
+      if (membershipExpired) {
+        $msg.textContent = "❌ Membership sudah kadaluarsa.";
+        return;
+      }
+      if ((m.points ?? 0) < spend) {
+        $msg.textContent = "❌ Poin kamu tidak cukup untuk jumlah redeem itu.";
+        return;
+      }
+
       try {
         await addDoc(collection(db, "redeemRequests"), {
           memberCode: state.memberCode,
-          pointsToSpend: 100,
+          pointsToSpend: spend,
           status: "pending",
           createdAt: serverTimestamp()
         });
-        $msg.textContent = "✅ Permintaan redeem terkirim. Mohon tunggu & refresh halaman.";
-        document.getElementById("sendRedeem").disabled = true;
-      } catch {
-        $msg.textContent = "❌ Gagal kirim redeem (permission denied).";
+        $msg.textContent = "✅ Permintaan redeem terkirim. Mohon tunggu admin ACC, lalu tekan Refresh.";
+        $btn.disabled = true;
+      } catch (e) {
+        $msg.textContent = "❌ Gagal kirim redeem (permission denied / rules).";
       }
     });
 
@@ -448,12 +517,14 @@ async function renderMemberTab() {
       const cls = used ? "bad" : (expired ? "warn" : "ok");
       const disabled = used || expired;
 
+      const disc = Number(v.discountRp ?? 0);
+
       return `
         <div class="subcard" style="margin-top:10px">
           <div class="row space">
             <div>
               <div class="code mono">${escapeHtml(v.code)}</div>
-              <div class="muted">Diskon: <b>Rp${(v.discountRp ?? 1000).toLocaleString("id-ID")}</b></div>
+              <div class="muted">Diskon: <b>Rp${rupiah(disc)}</b></div>
             </div>
             <span class="badge ${cls}">${status}</span>
           </div>
@@ -475,7 +546,7 @@ async function renderMemberTab() {
               <div class="row space">
                 <div>
                   <div class="capTitle">TPG Voucher</div>
-                  <div class="muted">Diskon Rp${(v.discountRp ?? 1000).toLocaleString("id-ID")}</div>
+                  <div class="muted">Diskon Rp${rupiah(disc)}</div>
                 </div>
                 <span class="badge ${cls}">${status}</span>
               </div>
@@ -655,13 +726,14 @@ async function renderAdminPanel() {
         const used = !!v.used;
         const status = used ? "Dipakai" : (expired ? "Kadaluarsa" : "Aktif");
         const cls = used ? "bad" : (expired ? "warn" : "ok");
+        const disc = Number(v.discountRp ?? 0);
 
         return `
           <div class="subcard" style="margin-top:10px">
             <div class="row space">
               <div>
                 <div class="code mono">${escapeHtml(v.code)}</div>
-                <div class="muted">${status} • Berlaku sampai ${fmtDate(v.expiresAt)}</div>
+                <div class="muted">${status} • Diskon Rp${rupiah(disc)} • Sampai ${fmtDate(v.expiresAt)}</div>
               </div>
               <span class="badge ${cls}">${status}</span>
             </div>
@@ -817,14 +889,17 @@ async function loadPendingRedeems() {
 
     el.innerHTML = `
       <table class="table">
-        <thead><tr><th>MemberCode</th><th>Poin</th><th>Aksi</th></tr></thead>
+        <thead><tr><th>MemberCode</th><th>Poin</th><th>Diskon</th><th>Aksi</th></tr></thead>
         <tbody>
           ${snap.docs.map(d => {
             const rr = d.data();
+            const p = Number(rr.pointsToSpend ?? 0);
+            const disc = p * DISCOUNT_PER_POINT_RP;
             return `
               <tr>
                 <td class="mono">${escapeHtml(rr.memberCode)}</td>
-                <td>${escapeHtml(rr.pointsToSpend ?? 100)}</td>
+                <td>${escapeHtml(p)}</td>
+                <td>Rp${rupiah(disc)}</td>
                 <td>
                   <button class="btn secondary" data-acc="${d.id}">ACC</button>
                   <button class="btn danger" data-rej="${d.id}">Tolak</button>
@@ -862,14 +937,25 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function generateUniqueVoucherCode() {
-  for (let i = 0; i < 30; i++) {
-    const n = randInt(1, 99999);
-    const code = `TPGVOUCHMEMBER${n}`;
+function pad5(n) {
+  return String(n).padStart(5, "0");
+}
+
+/** ✅ format: TPG{points}VCMEM{RANDOM5} */
+async function generateUniqueVoucherCode(points) {
+  const p = clampRedeemPoints(points);
+  if (p === null) throw new Error("Invalid points for voucher.");
+
+  for (let i = 0; i < 40; i++) {
+    const r = pad5(randInt(1, 99999));
+    const code = `TPG${p}VCMEM${r}`;
     const snap = await getDoc(doc(db, "vouchers", code));
     if (!snap.exists()) return code;
   }
-  return `TPGVOUCHMEMBER${Date.now() % 100000}`;
+
+  // fallback
+  const r = pad5((Date.now() % 99999) + 1);
+  return `TPG${p}VCMEM${r}`;
 }
 
 async function approveRedeem(redeemRequestId) {
@@ -879,9 +965,16 @@ async function approveRedeem(redeemRequestId) {
 
   const rr = reqSnap.data();
   const memberCode = rr.memberCode;
-  const pointsToSpend = rr.pointsToSpend ?? 100;
+  const pointsToSpend = clampRedeemPoints(rr.pointsToSpend);
 
-  const voucherCode = await generateUniqueVoucherCode();
+  if (pointsToSpend === null) {
+    await iosAlert("Gagal", `PointsToSpend invalid. Harus ${REDEEM_MIN}–${REDEEM_MAX}.`);
+    return;
+  }
+
+  const discountRp = pointsToSpend * DISCOUNT_PER_POINT_RP;
+
+  const voucherCode = await generateUniqueVoucherCode(pointsToSpend);
   const approvedAt = new Date();
   const expiresAt = new Date(approvedAt.getTime() + 7*24*60*60*1000);
 
@@ -900,14 +993,15 @@ async function approveRedeem(redeemRequestId) {
 
     if (nowMs() > tsMs(priv.expiresAt)) throw new Error("Membership kadaluarsa.");
 
-    const curPoints = priv.points ?? 0;
+    const curPoints = Number(priv.points ?? 0);
     if (curPoints < pointsToSpend) throw new Error("Poin tidak cukup.");
 
     const newPoints = curPoints - pointsToSpend;
 
     const newVoucher = {
       code: voucherCode,
-      discountRp: 1000,
+      pointsSpent: pointsToSpend,
+      discountRp,
       approvedAt,
       expiresAt,
       used: false,
@@ -923,7 +1017,8 @@ async function approveRedeem(redeemRequestId) {
     tx.set(vouRef, {
       voucherCode,
       memberCode,
-      discountRp: 1000,
+      pointsSpent: pointsToSpend,
+      discountRp,
       approvedAt,
       expiresAt,
       used: false,
@@ -963,7 +1058,7 @@ async function updatePoints(memberCode, delta) {
     const pubSnap  = await tx.get(pubRef);
     if (!privSnap.exists() || !pubSnap.exists()) throw new Error("Member tidak ditemukan.");
 
-    const cur = privSnap.data().points ?? 0;
+    const cur = Number(privSnap.data().points ?? 0);
     const next = Math.max(0, cur + delta);
 
     tx.update(privRef, { points: next });
@@ -1019,14 +1114,10 @@ async function adminDeleteVoucher(memberCode, voucherCode) {
 
     const pub = pubSnap.data();
     const vouchers = Array.isArray(pub.vouchers) ? pub.vouchers : [];
-
-    /** ✅ FIX: pakai filtered, bukan vouchers lama */
     const filtered = vouchers.filter(v => v.code !== voucherCode);
 
-    /** ✅ FIX: update array yang sudah difilter */
     tx.update(pubRef, { vouchers: filtered });
 
-    /** delete doc voucher (kalau rules mengizinkan) */
     const vSnap = await tx.get(vRef);
     if (vSnap.exists()) tx.delete(vRef);
   });
