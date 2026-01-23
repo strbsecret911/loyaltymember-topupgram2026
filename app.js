@@ -755,7 +755,12 @@ async function approveRegistration(requestId) {
   if (!reqSnap.exists()) return;
 
   const r = reqSnap.data();
-  const telegramId = prompt("Isi Telegram ID (angka) untuk ACC:");
+
+  const telegramId = await iosPrompt(
+    "Approve Membership",
+    "Isi Telegram ID (angka) untuk ACC:",
+    "contoh: 123456789"
+  );
   if (!telegramId) return;
 
   const memberCode = `TPGCARD${String(telegramId).trim()}`;
@@ -932,7 +937,13 @@ async function approveRedeem(redeemRequestId) {
 
 async function rejectDoc(colName, id) {
   const ref = doc(db, colName, id);
-  const reason = prompt("Alasan penolakan? (opsional)") ?? "";
+
+  const reason = (await iosPrompt(
+    "Tolak Permintaan",
+    "Alasan penolakan? (opsional)",
+    "contoh: data tidak valid"
+  )) ?? "";
+
   await updateDoc(ref, {
     status: "rejected",
     reviewedAt: serverTimestamp(),
@@ -986,7 +997,13 @@ async function adminToggleUsed(memberCode, voucherCode) {
 }
 
 async function adminDeleteVoucher(memberCode, voucherCode) {
-  const ok = confirm(`Hapus voucher ${voucherCode}?`);
+  const ok = await iosConfirm(
+    "Hapus Voucher",
+    `Hapus voucher ${voucherCode}?`,
+    "Hapus",
+    "Batal",
+    true
+  );
   if (!ok) return;
 
   await runTransaction(db, async (tx) => {
