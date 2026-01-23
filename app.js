@@ -109,6 +109,109 @@ function setTopbar() {
   `;
   document.getElementById("btnLogout")?.addEventListener("click", () => signOut(auth));
 }
+// ===== iOS-like Modal (Alert / Confirm / Prompt) =====
+function ensureIosModal() {
+  if (document.getElementById("iosModal")) return;
+
+  const wrap = document.createElement("div");
+  wrap.id = "iosModal";
+  wrap.innerHTML = `
+    <div class="ios-backdrop hidden" id="iosBackdrop">
+      <div class="ios-sheet" role="dialog" aria-modal="true">
+        <div class="ios-head">
+          <div class="ios-title" id="iosTitle">Notification</div>
+          <div class="ios-msg" id="iosMsg"></div>
+        </div>
+
+        <div class="ios-inputWrap hidden" id="iosInputWrap">
+          <input class="ios-input" id="iosInput" />
+        </div>
+
+        <div class="ios-actions" id="iosActions"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+
+  // close when tap backdrop (optional)
+  document.getElementById("iosBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "iosBackdrop") {
+      // do nothing by default (safer)
+    }
+  });
+}
+
+function iosModal({ title="Notification", message="", input=false, placeholder="", okText="OK", cancelText="Cancel", danger=false }) {
+  ensureIosModal();
+
+  const backdrop = document.getElementById("iosBackdrop");
+  const t = document.getElementById("iosTitle");
+  const m = document.getElementById("iosMsg");
+  const inputWrap = document.getElementById("iosInputWrap");
+  const inputEl = document.getElementById("iosInput");
+  const actions = document.getElementById("iosActions");
+
+  t.textContent = title;
+  m.textContent = message;
+
+  actions.innerHTML = "";
+  inputWrap.classList.toggle("hidden", !input);
+  if (input) {
+    inputEl.value = "";
+    inputEl.placeholder = placeholder || "";
+    setTimeout(() => inputEl.focus(), 50);
+  }
+
+  backdrop.classList.remove("hidden");
+
+  return new Promise((resolve) => {
+    const btnCancel = document.createElement("button");
+    btnCancel.className = "ios-btn";
+    btnCancel.textContent = cancelText;
+
+    const btnOk = document.createElement("button");
+    btnOk.className = "ios-btn ios-ok" + (danger ? " ios-danger" : "");
+    btnOk.textContent = okText;
+
+    // for alert mode (no cancel)
+    if (cancelText) actions.appendChild(btnCancel);
+    actions.appendChild(btnOk);
+
+    const cleanup = () => {
+      backdrop.classList.add("hidden");
+      btnCancel.onclick = null;
+      btnOk.onclick = null;
+      document.onkeydown = null;
+    };
+
+    btnCancel.onclick = () => { cleanup(); resolve({ ok:false, value:null }); };
+    btnOk.onclick = () => {
+      const val = input ? (inputEl.value ?? "").trim() : null;
+      cleanup();
+      resolve({ ok:true, value: val });
+    };
+
+    document.onkeydown = (ev) => {
+      if (ev.key === "Escape" && cancelText) { cleanup(); resolve({ ok:false, value:null }); }
+      if (ev.key === "Enter") { btnOk.click(); }
+    };
+  });
+}
+
+async function iosAlert(title, message, okText="OK") {
+  await iosModal({ title, message, input:false, okText, cancelText:"" });
+}
+
+async function iosConfirm(title, message, okText="OK", cancelText="Cancel", danger=false) {
+  const res = await iosModal({ title, message, input:false, okText, cancelText, danger });
+  return res.ok;
+}
+
+async function iosPrompt(title, message, placeholder="", okText="OK", cancelText="Cancel") {
+  const res = await iosModal({ title, message, input:true, placeholder, okText, cancelText });
+  if (!res.ok) return null;
+  return res.value;
+}
 
 /** =========================
  * PUBLIC UI
