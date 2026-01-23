@@ -1,6 +1,5 @@
 /* ===============================
-   TPG – Combined App (ORDER + MEMBERSHIP)
-   Firestore: loyaltymembertpg (single DB)
+   TPG Card Membership – FINAL (No Index Needed)
    =============================== */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
@@ -17,8 +16,7 @@ import {
   limit,
   getDocs,
   serverTimestamp,
-  runTransaction,
-  onSnapshot
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 import {
@@ -30,7 +28,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
 /** =========================
- * CONFIG (loyaltymembertpg)
+ * CONFIG
  * ========================= */
 const firebaseConfig = {
   apiKey: "AIzaSyBPAPvzRAHLUVCVB1x7BbmgImB7IAQcrpY",
@@ -43,20 +41,10 @@ const firebaseConfig = {
 
 const ADMIN_EMAIL = "dinijanuari23@gmail.com";
 
-/** Redeem rules (membership) */
+/** Redeem rules */
 const REDEEM_MIN = 100;
 const REDEEM_MAX = 400;
 const DISCOUNT_PER_POINT_RP = 10; // 1 poin = Rp10 => 100 poin = Rp1000
-
-/** Order Open/Close settings doc */
-const STORE_DOC_PATH = ["settings", "store"];
-
-/** Telegram (order) */
-const TG_TOKEN = "1868293159:AAF7IWMtOEqmVqEkBAfCTexkj_siZiisC0E";
-const TG_CHAT_ID = "-1003629941301";
-
-/** Payment QR */
-const ORDER_QR_URL = "https://payment.uwu.ai/assets/images/gallery03/8555ed8a_original.jpg?v=58e63277";
 
 /** =========================
  * INIT
@@ -69,17 +57,11 @@ const provider = new GoogleAuthProvider();
 const $app = document.getElementById("app");
 const $topbarRight = document.getElementById("topbarRight");
 
-/** =========================
- * GLOBAL STATE
- * ========================= */
-let storeOpen = true;
-
 const state = {
-  // route
-  route: "order", // order | membership | admin
+  isAdminRoute: false,
   adminUser: null,
 
-  // membership public
+  // public
   publicView: "landing", // landing | register | lookup | member
   memberCode: "",
   member: null,
@@ -87,12 +69,25 @@ const state = {
 };
 
 /** =========================
- * Helpers (shared)
+ * Helpers
  * ========================= */
+function isAdminRoute() {
+  const h = (location.hash || "").toLowerCase();
+  const q = new URLSearchParams(location.search);
+  const path = (location.pathname || "").toLowerCase();
+  return h.includes("admin") || q.has("admin") || path.endsWith("/admin");
+}
+
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (m) => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
   }[m]));
+}
+
+function fmtDate(ts) {
+  if (!ts) return "-";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("id-ID", { year:"numeric", month:"short", day:"2-digit" });
 }
 
 function nowMs(){ return Date.now(); }
@@ -103,23 +98,36 @@ function rupiah(n){
   return v.toLocaleString("id-ID");
 }
 
-function fmtDate(ts) {
-  if (!ts) return "-";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString("id-ID", { year:"numeric", month:"short", day:"2-digit" });
+function badge(status) {
+  return `<span class="badge">${escapeHtml(status)}</span>`;
 }
 
-function clampRedeemPoints(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.floor(n);
-  if (i < REDEEM_MIN || i > REDEEM_MAX) return null;
-  return i;
+function setTopbar() {
+  if (!state.isAdminRoute) {
+    $topbarRight.innerHTML = `<a class="badge link" href="#admin">Admin</a>`;
+    return;
+  }
+
+  if (!state.adminUser) {
+    $topbarRight.innerHTML = `<span class="badge">Admin mode</span>`;
+    return;
+  }
+
+  $topbarRight.innerHTML = `
+    <span class="badge ok">Admin: ${escapeHtml(state.adminUser.email)}</span>
+    <button class="btn secondary" id="btnLogout">Logout</button>
+  `;
+  document.getElementById("btnLogout")?.addEventListener("click", () => signOut(auth));
 }
 
-/** =========================
- * iOS-like Modal (membership)
- * ========================= */
+/** ✅ reload memberPublic supaya status voucher update (used/delete) kebaca di member UI */
+async function reloadMemberPublic() {
+  if (!state.memberCode) return;
+  const snap = await getDoc(doc(db, "membersPublic", state.memberCode));
+  if (snap.exists()) state.member = snap.data();
+}
+
+/** ===== iOS-like Modal (Alert / Confirm / Prompt) ===== */
 function ensureIosModal() {
   if (document.getElementById("iosModal")) return;
 
@@ -219,708 +227,17 @@ async function iosPrompt(title, message, placeholder="", okText="OK", cancelText
   return res.value;
 }
 
-/** =========================
- * Order popup (existing style)
- * ========================= */
-function showValidationPopupCenter(title, message, submessage){
-  const existing = document.getElementById('validationCenterPopup');
-  if(existing) existing.remove();
-
-  const container = document.getElementById('validationContainer') || document.body;
-
-  const popup = document.createElement('div');
-  popup.id = 'validationCenterPopup';
-  popup.className = 'validation-center';
-  popup.tabIndex = -1;
-
-  const safeTitle = title || 'Notification';
-  const safeMsg = message || '';
-  const safeSub = submessage || '';
-
-  popup.innerHTML = `
-    <div class="hdr">${safeTitle}</div>
-    <div class="divider"></div>
-    <div class="txt">${safeMsg}</div>
-    ${safeSub ? `<div class="subtxt">${safeSub}</div>` : ``}
-    <div class="btnRow">
-      <button type="button" class="okbtn">OK</button>
-    </div>
-  `;
-
-  container.appendChild(popup);
-
-  const okBtn = popup.querySelector('.okbtn');
-
-  function removePopup(){
-    popup.style.transition = 'opacity 160ms ease, transform 160ms ease';
-    popup.style.opacity = '0';
-    popup.style.transform = 'translate(-50%,-50%) scale(.98)';
-    setTimeout(()=> popup.remove(), 170);
-  }
-
-  okBtn.addEventListener('click', removePopup);
-  popup.focus({preventScroll:true});
-
-  const t = setTimeout(removePopup, 7000);
-  window.addEventListener('pagehide', ()=>{ clearTimeout(t); if(popup) popup.remove(); }, { once:true });
+function clampRedeemPoints(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  if (i < REDEEM_MIN || i > REDEEM_MAX) return null;
+  return i;
 }
 
 /** =========================
- * Store Open/Close listener
+ * PUBLIC UI
  * ========================= */
-function startStoreListener(){
-  const ref = doc(db, STORE_DOC_PATH[0], STORE_DOC_PATH[1]);
-  onSnapshot(ref, (snap) => {
-    if(snap.exists()){
-      const data = snap.data();
-      storeOpen = (data.open !== false);
-    } else storeOpen = true;
-    updateAdminStoreBadge();
-  }, () => {
-    storeOpen = true;
-    updateAdminStoreBadge();
-  });
-}
-
-/** =========================
- * Router helpers
- * ========================= */
-function parseRouteFromHash(){
-  const h = (location.hash || "").toLowerCase();
-  if(h.startsWith("#admin")) return "admin";
-  if(h.startsWith("#membership")) return "membership";
-  if(h.startsWith("#order") || h === "" || h === "#") return "order";
-  return "order";
-}
-
-function setTopbar(){
-  const isAdmin = !!(state.adminUser && (state.adminUser.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase());
-
-  const leftBtns = `
-    <a class="badge link" href="#order">Order</a>
-    <a class="badge link" href="#membership">Membership</a>
-    <a class="badge link" href="#admin">Admin</a>
-  `;
-
-  if(state.route !== "admin"){
-    $topbarRight.innerHTML = leftBtns;
-    return;
-  }
-
-  if(!state.adminUser){
-    $topbarRight.innerHTML = leftBtns + `<span class="badge">Admin mode</span>`;
-    return;
-  }
-
-  $topbarRight.innerHTML = leftBtns + `
-    <span class="badge ok">Admin: ${escapeHtml(state.adminUser.email)}</span>
-    <button class="btn secondary" id="btnLogout">Logout</button>
-  `;
-  document.getElementById("btnLogout")?.addEventListener("click", () => signOut(auth));
-}
-
-/** =========================
- * ORDER VIEW (Pricelist + Form)
- * ========================= */
-function renderOrderPage(){
-  // UI utama order (render di #app). Kamu bisa edit daftar harga di sini kapanpun.
-  $app.innerHTML = `
-    <div class="page">
-
-      <div class="category">
-        <h3>⚡️Best Offers</h3>
-        <div class="prcContainer">
-          <div class="bc" data-nm="580 Robux" data-hg="90000" data-kt="fs">580 Robux<span>Rp90.000</span></div>
-          <div class="bc" data-nm="660 Robux" data-hg="106000" data-kt="fs">660 Robux<span>Rp106.000</span></div>
-          <div class="bc" data-nm="740 Robux" data-hg="122000" data-kt="fs">740 Robux<span>Rp122.000</span></div>
-          <div class="bc" data-nm="820 Robux" data-hg="136000" data-kt="fs">820 Robux<span>Rp136.000</span></div>
-          <div class="bc" data-nm="1240 Robux" data-hg="196000" data-kt="fs">1240 Robux<span>Rp196.000</span></div>
-        </div>
-      </div>
-
-      <div class="category">
-        <h3>Robux Reguler</h3>
-        <div class="prcContainer">
-          <div class="bc" data-nm="80 Robux" data-hg="16000" data-kt="reg">80 Robux<span>Rp16.000</span></div>
-          <div class="bc" data-nm="160 Robux" data-hg="32000" data-kt="reg">160 Robux<span>Rp32.000</span></div>
-          <div class="bc" data-nm="240 Robux" data-hg="48000" data-kt="reg">240 Robux<span>Rp48.000</span></div>
-          <div class="bc" data-nm="320 Robux" data-hg="62000" data-kt="reg">320 Robux<span>Rp62.000</span></div>
-          <div class="bc" data-nm="400 Robux" data-hg="000" data-kt="reg">400 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="480 Robux" data-hg="000" data-kt="reg">480 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="560 Robux" data-hg="000" data-kt="reg">560 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="640 Robux" data-hg="000" data-kt="reg">640 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="720 Robux" data-hg="000" data-kt="reg">720 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="800 Robux" data-hg="000" data-kt="reg">800 Robux<span>No Stock</span></div>
-          <div class="bc" data-nm="1740 Robux" data-hg="270000" data-kt="reg">1.740 Robux<span>Rp270.000</span></div>
-        </div>
-      </div>
-
-      <div class="category">
-        <h3>Robux Basic</h3>
-        <div class="prcContainer">
-          <div class="bc" data-nm="500 Robux" data-hg="74000" data-kt="spc">500 Robux<span>Rp74.000</span></div>
-          <div class="bc" data-nm="1000 Robux" data-hg="148000" data-kt="spc">1.000 Robux<span>Rp148.000</span></div>
-          <div class="bc" data-nm="1500 Robux" data-hg="222000" data-kt="spc">1.500 Robux<span>Rp222.000</span></div>
-          <div class="bc" data-nm="2000 Robux" data-hg="296000" data-kt="spc">2.000 Robux<span>Rp296.000</span></div>
-          <div class="bc" data-nm="2500 Robux" data-hg="370000" data-kt="spc">2.500 Robux<span>Rp370.000</span></div>
-          <div class="bc" data-nm="3000 Robux" data-hg="444000" data-kt="spc">3.000 Robux<span>Rp444.000</span></div>
-          <div class="bc" data-nm="3500 Robux" data-hg="518000" data-kt="spc">3.500 Robux<span>Rp518.000</span></div>
-          <div class="bc" data-nm="4000 Robux" data-hg="592000" data-kt="spc">4.000 Robux<span>Rp592.000</span></div>
-          <div class="bc" data-nm="5000 Robux" data-hg="740000" data-kt="spc">5.000 Robux<span>Rp740.000</span></div>
-          <div class="bc" data-nm="6000 Robux" data-hg="888000" data-kt="spc">6.000 Robux<span>Rp888.000</span></div>
-          <div class="bc" data-nm="10000 Robux" data-hg="1480000" data-kt="spc">10.000 Robux<span>Rp1.480.000</span></div>
-          <div class="bc" data-nm="15000 Robux" data-hg="2220000" data-kt="spc">15.000 Robux<span>Rp2.220.000</span></div>
-          <div class="bc" data-nm="22500 Robux" data-hg="3300000" data-kt="spc">22.500 Robux<span>Rp3.300.000</span></div>
-        </div>
-      </div>
-
-      <div class="category">
-        <h3>Robux Premium</h3>
-        <div class="prcContainer">
-          <div class="bc" data-nm="450 Robux + Premium" data-hg="74000" data-kt="pre">450 Robux + Premium<span>Rp74.000</span></div>
-          <div class="bc" data-nm="1000 Robux + Premium" data-hg="148000" data-kt="pre">1.000 Robux + Premium<span>Rp148.000</span></div>
-          <div class="bc" data-nm="1550 Robux + Premium" data-hg="222000" data-kt="pre">1.550 Robux + Premium<span>Rp222.000</span></div>
-          <div class="bc" data-nm="2200 Robux + Premium" data-hg="296000" data-kt="pre">2.200 Robux + Premium<span>Rp296.000</span></div>
-          <div class="bc" data-nm="2750 Robux + Premium" data-hg="370000" data-kt="pre">2.750 Robux + Premium<span>Rp370.000</span></div>
-          <div class="bc" data-nm="3300 Robux + Premium" data-hg="444000" data-kt="pre">3.300 Robux + Premium<span>Rp444.000</span></div>
-          <div class="bc" data-nm="11000 Robux + Premium" data-hg="1480000" data-kt="pre">11.000 Robux + Premium<span>Rp1.480.000</span></div>
-        </div>
-      </div>
-
-      <div class="form-container" id="orderSection">
-        <h2>Form Pembelian Robux VILOG</h2>
-
-        <form id="frm">
-          <div class="form-group">
-            <label for="usr">Username Roblox *</label>
-            <input type="text" id="usr" name="usr" placeholder="Username Roblox" required>
-          </div>
-
-          <div class="form-group">
-            <label for="pwd">Password Roblox *</label>
-            <input type="password" id="pwd" name="pwd" placeholder="Password Roblox" required>
-          </div>
-
-          <div class="form-group">
-            <label for="v2">V2L *</label>
-            <select id="v2" name="v2" required>
-              <option value="">-- Pilih Status --</option>
-              <option value="OFF">OFF</option>
-              <option value="ON">ON</option>
-            </select>
-          </div>
-
-          <div class="form-group hidden" id="v2m_div">
-            <label for="v2m">Metode V2L *</label>
-            <select id="v2m" name="v2m">
-              <option value="">-- Pilih Metode --</option>
-              <option value="BC">Backup Code</option>
-              <option value="EM">Kode Email</option>
-            </select>
-          </div>
-
-          <div class="form-group hidden" id="bc_div">
-            <label for="bc">Backup Code *</label>
-            <input type="text" id="bc" name="bc" placeholder="Isi Backup Code">
-            <div class="notes">Masukkan 1-3 backup code yang belum dipakai.</div>
-          </div>
-
-          <div class="form-group hidden" id="em_div">
-            <div class="notes">Pastikan storage email tidak penuh, standby & fast respon.</div>
-          </div>
-
-          <div class="form-group hidden">
-            <label for="kt">Kategori *</label>
-            <input type="text" id="kt" name="kt" readonly required>
-          </div>
-
-          <div class="form-group">
-            <label for="nm">Nominal *</label>
-            <input type="text" id="nm" name="nm" readonly required>
-          </div>
-
-          <div class="form-group">
-            <label for="hg">Harga *</label>
-            <input type="text" id="hg" name="hg" readonly required>
-          </div>
-
-          <div class="form-group">
-            <label for="vch">Voucher (opsional)</label>
-            <input type="text" id="vch" name="vch" placeholder="Contoh: TPG120VCMEM30607" autocomplete="off">
-            <div id="voucherStatus" class="notes voucher-status" style="display:none;"></div>
-          </div>
-
-          <div style="text-align:center; margin:14px 0 6px;">
-            <button type="button" id="btnTg">Pesan via Telegram</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `;
-
-  bindOrderLogic();
-}
-
-function sanitize(v){ return v ? Number(String(v).replace(/\D+/g,'')) : NaN; }
-
-function fillOrder({nmText,hgRaw,ktVal}) {
-  document.getElementById('nm').value = nmText || '';
-  document.getElementById('kt').value = ktVal || '';
-  const h = sanitize(hgRaw);
-  document.getElementById('hg').value = !isNaN(h)
-    ? 'Rp'+new Intl.NumberFormat('id-ID').format(h)
-    : (hgRaw || '');
-}
-
-function setVoucherStatus(msg, kind){
-  const el = document.getElementById('voucherStatus');
-  if(!el) return;
-  el.classList.remove('ok','bad');
-  if(kind === 'ok') el.classList.add('ok');
-  if(kind === 'bad') el.classList.add('bad');
-  el.textContent = msg || '';
-  el.style.display = msg ? 'block' : 'none';
-}
-
-function normalizeVoucher(raw){
-  return String(raw || '').trim().toUpperCase();
-}
-
-function parseVoucher(code){
-  const m = /^TPG(\d{3})VCMEM(\d{1,5})$/.exec(code);
-  if(!m) return { ok:false, reason:'Format voucher salah. Contoh: TPG120VCMEM30607' };
-  const tpg = Number(m[1]);
-  const uniq = Number(m[2]);
-  if(!(tpg >= 100 && tpg <= 400 && tpg % 10 === 0)) return { ok:false, reason:'Kode TPG harus 100–400 (kelipatan 10).' };
-  if(!(uniq >= 1 && uniq <= 99999)) return { ok:false, reason:'Kode VCMEM harus 1–99999.' };
-  return { ok:true, tpg, uniq };
-}
-
-async function claimVoucherForOrder(code, orderMeta){
-  // voucher valid hanya kalau ada di Firestore "vouchers/{code}" dan used:false
-  const ref = doc(db, "vouchers", code);
-
-  const result = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if(!snap.exists()) throw new Error("NOT_FOUND");
-
-    const data = snap.data() || {};
-    if(data.used) throw new Error("USED");
-
-    // optional expiry check
-    if(data.expiresAt && nowMs() > tsMs(data.expiresAt)) throw new Error("EXPIRED");
-
-    const discountRp = Number(data.discountRp ?? (Number(data.pointsSpent ?? 0) * DISCOUNT_PER_POINT_RP) ?? 0);
-    if(!Number.isFinite(discountRp) || discountRp <= 0) throw new Error("BAD_DATA");
-
-    tx.update(ref, {
-      used: true,
-      usedAt: serverTimestamp(),
-      usedOrder: orderMeta || null
-    });
-
-    return { discountRp };
-  });
-
-  return result;
-}
-
-function formatRupiah(num){
-  return 'Rp' + new Intl.NumberFormat('id-ID').format(Number(num || 0));
-}
-
-function bindOrderLogic(){
-  // click pricelist
-  document.querySelectorAll('.bc').forEach(b=>{
-    b.addEventListener('click', ()=> fillOrder({
-      nmText: b.getAttribute('data-nm') || b.textContent.trim(),
-      hgRaw: b.getAttribute('data-hg') || '',
-      ktVal: b.getAttribute('data-kt') || ''
-    }));
-  });
-
-  // V2L dynamic fields
-  const v2 = document.getElementById('v2');
-  const v2m = document.getElementById('v2m');
-  const v2mDiv = document.getElementById('v2m_div');
-  const bcDiv = document.getElementById('bc_div');
-  const emDiv = document.getElementById('em_div');
-  const bcInput = document.getElementById('bc');
-
-  function updateV2Requirements(){
-    if(v2.value === 'ON'){
-      v2mDiv.classList.remove('hidden');
-      v2m.required = true;
-    } else {
-      v2mDiv.classList.add('hidden');
-      v2m.value = '';
-      v2m.required = false;
-      bcDiv.classList.add('hidden');
-      emDiv.classList.add('hidden');
-      bcInput.required = false;
-    }
-  }
-
-  function updateV2mRequirements(){
-    if(v2m.value === 'BC'){
-      bcDiv.classList.remove('hidden');
-      emDiv.classList.add('hidden');
-      bcInput.required = true;
-    } else if(v2m.value === 'EM'){
-      emDiv.classList.remove('hidden');
-      bcDiv.classList.add('hidden');
-      bcInput.required = false;
-      bcInput.value = '';
-    } else {
-      bcDiv.classList.add('hidden');
-      emDiv.classList.add('hidden');
-      bcInput.required = false;
-      bcInput.value = '';
-    }
-  }
-
-  v2.addEventListener('change', updateV2Requirements);
-  v2m.addEventListener('change', updateV2mRequirements);
-  updateV2Requirements();
-  updateV2mRequirements();
-
-  // BTN PESAN
-  document.getElementById('btnTg').addEventListener('click', async ()=>{
-    if(!storeOpen){
-      showValidationPopupCenter(
-        'Notification',
-        'SEDANG ISTIRAHAT/CLOSE',
-        'Mohon maaf, saat ini kamu belum bisa melakukan pemesanan. Silahkan kembali dan coba lagi nanti.'
-      );
-      return;
-    }
-
-    const f = document.getElementById('frm');
-
-    // required fields
-    const req = f.querySelectorAll('input[required], select[required]');
-    for(const i of req){
-      if(!String(i.value || '').trim()){
-        showValidationPopupCenter('Notification', 'Oops', 'Harap isi semua kolom yang diwajibkan!');
-        try{ i.focus(); }catch(e){}
-        return;
-      }
-    }
-
-    if(v2.value === 'ON'){
-      if(!v2m.value){
-        showValidationPopupCenter('Notification', 'Oops', 'Pilih metode V2L terlebih dahulu.');
-        v2m.focus();
-        return;
-      }
-      if(v2m.value === 'BC'){
-        const bcVal = bcInput.value || '';
-        if(!bcVal.trim()){
-          showValidationPopupCenter('Notification', 'Oops', 'Masukkan Backup Code saat memilih metode Backup Code.');
-          bcInput.focus();
-          return;
-        }
-      }
-    }
-
-    const u = document.getElementById('usr').value;
-    const p = document.getElementById('pwd').value;
-    const v = v2.value;
-    const vm = v2m.value;
-    const b = bcDiv.querySelector('input')?.value || '';
-    const kt = document.getElementById('kt').value;
-    const nm = document.getElementById('nm').value;
-    const hg = document.getElementById('hg').value;
-
-    const basePrice = Number(String(hg).replace(/[^\d]/g,''));
-    if(isNaN(basePrice) || basePrice <= 0){
-      showValidationPopupCenter('Notification','Oops','Harga belum valid. Pilih nominal dulu.');
-      return;
-    }
-
-    // Voucher
-    const voucherCode = normalizeVoucher(document.getElementById('vch')?.value || '');
-    let discount = 0;
-    let finalPrice = basePrice;
-
-    if(voucherCode){
-      const parsed = parseVoucher(voucherCode);
-      if(!parsed.ok){
-        setVoucherStatus(parsed.reason, 'bad');
-        showValidationPopupCenter('Notification','Voucher invalid', parsed.reason);
-        return;
-      }
-
-      try{
-        const claimed = await claimVoucherForOrder(voucherCode, {
-          username: u,
-          nominal: nm,
-          kategori: kt,
-          price: basePrice
-        });
-        discount = claimed.discountRp;
-        finalPrice = Math.max(0, basePrice - discount);
-        setVoucherStatus(`Voucher valid! Diskon ${formatRupiah(discount)}.`, 'ok');
-      } catch(e){
-        const msg =
-          e?.message === "NOT_FOUND" ? "Voucher tidak ditemukan (belum dibuat admin)." :
-          e?.message === "USED" ? "Voucher sudah dipakai." :
-          e?.message === "EXPIRED" ? "Voucher sudah kadaluarsa." :
-          "Gagal verifikasi voucher. Coba lagi.";
-        setVoucherStatus(msg, 'bad');
-        showValidationPopupCenter('Notification','Voucher invalid', msg);
-        return;
-      }
-    } else {
-      setVoucherStatus('', '');
-    }
-
-    const finalPriceFormatted = formatRupiah(finalPrice);
-
-    function removeUrlsAndGithub(s){
-      if(!s) return '';
-      s = s.replace(/https?:\/\/\S+/gi, '');
-      s = s.replace(/www\.\S+/gi, '');
-      s = s.replace(/\b\S*github\S*\b/gi, '');
-      s = s.replace(/\n{2,}/g, '\n').replace(/[ \t]{2,}/g,' ');
-      return s.trim();
-    }
-
-    let txt = 'Pesanan Baru Masuk!\n\n'
-      + 'Username: ' + u + '\n'
-      + 'Password: ' + p + '\n'
-      + 'V2L: ' + v + (vm ? ' (' + vm + ')' : '')
-      + (b ? '\nBackup Code: ' + b : '')
-      + '\nKategori: ' + kt
-      + '\nNominal: ' + nm
-      + '\nHarga Awal: ' + hg
-      + (voucherCode
-          ? `\nVoucher: ${voucherCode}\nDiskon: ${formatRupiah(discount)}\nTotal: ${finalPriceFormatted}`
-          : `\nTotal: ${hg}`);
-
-    txt = removeUrlsAndGithub(txt);
-
-    try{
-      const res = await fetch('https://api.telegram.org/bot'+TG_TOKEN+'/sendMessage',{
-        method:'POST',
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({chat_id:TG_CHAT_ID, text:txt})
-      });
-
-      if(!res.ok){
-        showValidationPopupCenter('Notification','Gagal','Gagal kirim ke Telegram.');
-        return;
-      }
-
-      showPaymentPopup(ORDER_QR_URL, voucherCode ? finalPriceFormatted : hg);
-
-      f.reset();
-      updateV2Requirements();
-      updateV2mRequirements();
-      setVoucherStatus('', '');
-      const vchEl = document.getElementById('vch');
-      if(vchEl) vchEl.value = '';
-
-    } catch(err){
-      showValidationPopupCenter('Notification','Error','Terjadi kesalahan jaringan.');
-    }
-  });
-}
-
-/** =========================
- * Payment Popup (same as order)
- * ========================= */
-function showPaymentPopup(qrUrl, hargaFormatted){
-  const backdrop = document.getElementById('paymentModalBackdrop');
-  const modalQr = document.getElementById('modalQr');
-  const modalAmount = document.getElementById('modalAmount');
-  const copySuccess = document.getElementById('copySuccess');
-
-  const walletLabel = document.getElementById('walletLabel');
-  const walletNumberTitle = document.getElementById('walletNumberTitle');
-  const walletNumber = document.getElementById('walletNumber');
-  const walletNumberWrapper = document.getElementById('walletNumberWrapper');
-  const walletNote = document.getElementById('walletNote');
-  const copyNumberBtn = document.getElementById('copyNumberBtn');
-
-  const methodButtons = document.querySelectorAll('.method-btn');
-  const copyAmountBtn = document.getElementById('copyAmountBtn');
-
-  const GOPAY_NUMBER   = '083197962700';
-  const DANA_NUMBER    = '083197962700';
-  const SEABANK_NUMBER = '901673348752';
-
-  const baseAmount = (function () {
-    const num = Number(String(hargaFormatted).replace(/[^\d]/g, ''));
-    return isNaN(num) ? 0 : num;
-  })();
-
-  function formatRupiahLocal(num) {
-    return "Rp" + new Intl.NumberFormat('id-ID').format(num);
-  }
-
-  const METHOD_CONFIG = {
-    qris: {
-      label: 'QRIS (scan QR di atas)',
-      numberTitle: '',
-      number: '',
-      calcTotal: (base) => {
-        if (base <= 499000) return base;
-        const fee = Math.round(base * 0.003);
-        return base + fee;
-      },
-      note: 'QRIS hingga Rp499.000 tidak ada biaya tambahan. Di atas itu akan dikenakan biaya 0,3% dari nominal.',
-      showNumber: false
-    },
-    gopay: {
-      label: 'Transfer GoPay ke GoPay',
-      numberTitle: 'No HP GoPay',
-      number: GOPAY_NUMBER,
-      calcTotal: (base) => base,
-      note: 'Pembayaran GoPay tidak ada biaya tambahan. Bayar sesuai nominal yang tertera.',
-      showNumber: true
-    },
-    seabank: {
-      label: 'Transfer SeaBank',
-      numberTitle: 'No rekening SeaBank',
-      number: SEABANK_NUMBER,
-      calcTotal: (base) => base,
-      note: 'SeaBank tidak ada biaya tambahan. Bayar sesuai nominal yang tertera.',
-      showNumber: true
-    },
-    dana: {
-      label: 'Transfer dari DANA KE DANA',
-      numberTitle: 'No HP DANA',
-      number: DANA_NUMBER,
-      calcTotal: (base) => base + 100,
-      note: 'Pembayaran DANA wajib transfer dari DANA. Dikenakan biaya admin Rp100. Total sudah termasuk biaya admin.',
-      showNumber: true
-    }
-  };
-
-  function showMessage(msg) {
-    copySuccess.textContent = msg;
-    copySuccess.style.display = 'block';
-    setTimeout(()=> copySuccess.style.display = 'none', 2500);
-  }
-
-  function fallbackCopy(text, successMsg){
-    const tmp = document.createElement('textarea');
-    tmp.value = text;
-    document.body.appendChild(tmp);
-    tmp.select();
-    try { document.execCommand('copy'); showMessage(successMsg); }
-    catch(e){ showMessage('Tidak dapat menyalin, silakan salin manual.'); }
-    document.body.removeChild(tmp);
-  }
-
-  function copyTextToClipboard(text, successMsg) {
-    if (!text) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => showMessage(successMsg)).catch(() => fallbackCopy(text, successMsg));
-    } else {
-      fallbackCopy(text, successMsg);
-    }
-  }
-
-  function applyMethod(methodKey) {
-    methodButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.method === methodKey));
-    const cfg = METHOD_CONFIG[methodKey];
-
-    walletLabel.textContent = cfg.label;
-    walletNote.textContent = cfg.note;
-
-    const total = cfg.calcTotal(baseAmount);
-    modalAmount.textContent = formatRupiahLocal(total);
-
-    if (cfg.showNumber) {
-      walletNumberTitle.textContent = cfg.numberTitle;
-      walletNumber.textContent = cfg.number;
-      walletNumberWrapper.style.display = 'block';
-      copyNumberBtn.style.display = 'block';
-    } else {
-      walletNumberWrapper.style.display = 'none';
-      copyNumberBtn.style.display = 'none';
-    }
-
-    if (methodKey === 'qris') {
-      modalQr.style.display = 'block';
-      modalQr.src = qrUrl;
-    } else {
-      modalQr.style.display = 'none';
-    }
-  }
-
-  applyMethod('qris');
-
-  copySuccess.style.display = 'none';
-  backdrop.style.display = 'flex';
-  backdrop.setAttribute('aria-hidden','false');
-
-  methodButtons.forEach(btn => { btn.onclick = function () { applyMethod(this.dataset.method); }; });
-
-  document.getElementById('closeModalBtn').onclick = function(){
-    backdrop.style.display = 'none';
-    backdrop.setAttribute('aria-hidden','true');
-  };
-  backdrop.onclick = function(e){
-    if(e.target === backdrop){
-      backdrop.style.display = 'none';
-      backdrop.setAttribute('aria-hidden','true');
-    }
-  };
-
-  copyNumberBtn.onclick = function () {
-    copyTextToClipboard(walletNumber.textContent || '', 'Nomor berhasil disalin');
-  };
-
-  copyAmountBtn.onclick = function(){
-    copyTextToClipboard(modalAmount.textContent || '', 'Jumlah berhasil disalin');
-  };
-
-  document.getElementById('openBotBtn').onclick = function(){
-    const botUsername = 'topupgamesbot';
-    const tgScheme = 'tg://resolve?domain=' + encodeURIComponent(botUsername);
-    const webLink  = 'https://t.me/' + encodeURIComponent(botUsername) + '?start';
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-    let appOpened = false;
-    function onVisibilityChange(){ if(document.hidden) appOpened = true; }
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    try {
-      if(isMobile){
-        window.location.href = tgScheme;
-      } else {
-        const newWin = window.open(tgScheme, '_blank');
-        if(newWin){ try{ newWin.focus(); }catch(e){} }
-      }
-    } catch(e){}
-
-    const fallbackTimeout = setTimeout(function(){
-      if(!appOpened){
-        window.open(webLink, '_blank');
-      }
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    }, 800);
-
-    window.addEventListener('pagehide', function cleanup(){
-      clearTimeout(fallbackTimeout);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', cleanup);
-    });
-  };
-}
-
-/** =========================
- * MEMBERSHIP PUBLIC UI (as-is)
- * ========================= */
-async function reloadMemberPublic() {
-  if (!state.memberCode) return;
-  const snap = await getDoc(doc(db, "membersPublic", state.memberCode));
-  if (snap.exists()) state.member = snap.data();
-}
-
 function renderPublicLanding() {
   $app.innerHTML = `
     <div class="card">
@@ -940,14 +257,8 @@ function renderPublicLanding() {
     </div>
   `;
 
-  document.getElementById("goRegister").onclick = () => {
-    state.publicView = "register";
-    render();
-  };
-  document.getElementById("goLookup").onclick = () => {
-    state.publicView = "lookup";
-    render();
-  };
+  document.getElementById("goRegister").onclick = () => { state.publicView = "register"; render(); };
+  document.getElementById("goLookup").onclick = () => { state.publicView = "lookup"; render(); };
 }
 
 function renderPublicRegister() {
@@ -975,20 +286,13 @@ function renderPublicRegister() {
     </div>
   `;
 
-  document.getElementById("back").onclick = () => {
-    state.publicView = "landing";
-    render();
-  };
-
+  document.getElementById("back").onclick = () => { state.publicView = "landing"; render(); };
   document.getElementById("submit").onclick = async () => {
     const $msg = document.getElementById("msg");
     const name = document.getElementById("name").value.trim();
     let telegramUsername = document.getElementById("tg").value.trim();
 
-    if (!name || !telegramUsername) {
-      $msg.textContent = "Mohon isi semua data.";
-      return;
-    }
+    if (!name || !telegramUsername) { $msg.textContent = "Mohon isi semua data."; return; }
     if (!telegramUsername.startsWith("@")) telegramUsername = "@" + telegramUsername;
 
     try {
@@ -1028,24 +332,14 @@ function renderPublicLookup() {
     </div>
   `;
 
-  document.getElementById("back").onclick = () => {
-    state.publicView = "landing";
-    render();
-  };
-
+  document.getElementById("back").onclick = () => { state.publicView = "landing"; render(); };
   document.getElementById("search").onclick = async () => {
     const $msg = document.getElementById("msg");
     const code = document.getElementById("code").value.trim().toUpperCase();
-    if (!code) {
-      $msg.textContent = "Mohon isi kode.";
-      return;
-    }
+    if (!code) { $msg.textContent = "Mohon isi kode."; return; }
 
     const snap = await getDoc(doc(db, "membersPublic", code));
-    if (!snap.exists()) {
-      $msg.textContent = "❌ Kode tidak ditemukan / belum aktif. Silahkan Daftar terlebih dahulu.";
-      return;
-    }
+    if (!snap.exists()) { $msg.textContent = "❌ Kode tidak ditemukan / belum aktif. Silahkan Daftar terlebih dahulu."; return; }
 
     state.memberCode = code;
     state.member = snap.data();
@@ -1065,9 +359,7 @@ function renderMemberPage() {
         <div>
           <h2>Member Card</h2>
           <div class="row">
-            <span class="badge ${membershipExpired ? "bad" : "ok"}">
-              ${membershipExpired ? "Membership Kadaluarsa" : "Membership Aktif"}
-            </span>
+            <span class="badge ${membershipExpired ? "bad" : "ok"}">${membershipExpired ? "Membership Kadaluarsa" : "Membership Aktif"}</span>
             <span class="badge">Poin: <b>${escapeHtml(m.points ?? 0)}</b></span>
           </div>
         </div>
@@ -1084,8 +376,8 @@ function renderMemberPage() {
       </div>
 
       <div class="tabs">
-        <button class="tab ${state.memberTab==="vouchers" ? "active" : ""}" id="tabV">Voucher Saya</button>
-        <button class="tab ${state.memberTab==="redeem" ? "active" : ""}" id="tabR">Redeem</button>
+        <button class="tab ${state.memberTab==="vouchers"?"active":""}" id="tabV">Voucher Saya</button>
+        <button class="tab ${state.memberTab==="redeem"?"active":""}" id="tabR">Redeem</button>
         <button class="tab" id="tabRefresh">Refresh</button>
       </div>
 
@@ -1100,18 +392,9 @@ function renderMemberPage() {
     render();
   };
 
-  document.getElementById("tabV").onclick = () => {
-    state.memberTab = "vouchers";
-    renderMemberTab();
-  };
-  document.getElementById("tabR").onclick = () => {
-    state.memberTab = "redeem";
-    renderMemberTab();
-  };
-  document.getElementById("tabRefresh").onclick = async () => {
-    await reloadMemberPublic();
-    renderMemberPage();
-  };
+  document.getElementById("tabV").onclick = () => { state.memberTab="vouchers"; renderMemberTab(); };
+  document.getElementById("tabR").onclick = () => { state.memberTab="redeem"; renderMemberTab(); };
+  document.getElementById("tabRefresh").onclick = async () => { await reloadMemberPublic(); renderMemberPage(); };
 
   renderMemberTab();
 }
@@ -1124,9 +407,6 @@ async function renderMemberTab() {
   await reloadMemberPublic();
   const m = state.member;
 
-  // ======================
-  // REDEEM TAB
-  // ======================
   if (state.memberTab === "redeem") {
     const membershipExpired = nowMs() > tsMs(m.expiresAt);
     const points = m.points ?? 0;
@@ -1143,9 +423,7 @@ async function renderMemberTab() {
         </p>
 
         <label>Jumlah poin yang mau diredeem</label>
-        <input class="input" id="redeemPoints" type="number"
-               min="${REDEEM_MIN}" max="${REDEEM_MAX}" step="1"
-               value="${defaultSpend}" />
+        <input class="input" id="redeemPoints" type="number" min="${REDEEM_MIN}" max="${REDEEM_MAX}" step="1" value="${defaultSpend}" />
 
         <div class="row" style="margin-top:10px">
           <button class="btn" id="sendRedeem" ${canRedeemAny ? "" : "disabled"}>
@@ -1165,19 +443,14 @@ async function renderMemberTab() {
 
     function updatePreview() {
       const spend = clampRedeemPoints($pts.value);
-
       if (!canRedeemAny) {
-        $prev.textContent = membershipExpired
-          ? "❌ Membership sudah kadaluarsa."
-          : `❌ Poin belum cukup (minimal ${REDEEM_MIN}).`;
+        $prev.textContent = membershipExpired ? "❌ Membership sudah kadaluarsa." : `❌ Poin belum cukup (minimal ${REDEEM_MIN}).`;
         return;
       }
-
       if (spend === null) {
         $prev.textContent = `Masukkan angka ${REDEEM_MIN}–${REDEEM_MAX}.`;
         return;
       }
-
       const disc = spend * DISCOUNT_PER_POINT_RP;
       $prev.textContent = `Preview: Redeem ${spend} poin → diskon Rp${rupiah(disc)} (kode: TPG${spend}VCMEMxxxxx)`;
     }
@@ -1219,9 +492,7 @@ async function renderMemberTab() {
     return;
   }
 
-  // ======================
-  // VOUCHERS TAB
-  // ======================
+  // vouchers tab
   const vouchers = Array.isArray(m.vouchers) ? m.vouchers : [];
   if (vouchers.length === 0) {
     wrap.innerHTML = `<p class="muted">Belum ada voucher. Setelah admin ACC, voucher akan muncul di sini.</p>`;
@@ -1257,8 +528,8 @@ async function renderMemberTab() {
           </div>
 
           <div class="row">
-            <button class="btn secondary" data-copy="${escapeHtml(v.code)}" ${disabled ? "disabled" : ""}>Salin</button>
-            <button class="btn secondary" data-save="${idx}" ${disabled ? "disabled" : ""}>Save as Photo</button>
+            <button class="btn secondary" data-copy="${escapeHtml(v.code)}" ${disabled?"disabled":""}>Salin</button>
+            <button class="btn secondary" data-save="${idx}" ${disabled?"disabled":""}>Save as Photo</button>
           </div>
 
           <p class="muted" id="vmsg-${idx}"></p>
@@ -1291,7 +562,7 @@ async function renderMemberTab() {
       const code = btn.getAttribute("data-copy");
       await navigator.clipboard.writeText(code);
       btn.textContent = "Tersalin ✅";
-      setTimeout(() => (btn.textContent = "Salin"), 1100);
+      setTimeout(() => btn.textContent = "Salin", 1100);
     });
   });
 
@@ -1300,7 +571,6 @@ async function renderMemberTab() {
       const idx = btn.getAttribute("data-save");
       const target = document.getElementById(`cap-${idx}`);
       const msg = document.getElementById(`vmsg-${idx}`);
-
       try {
         const canvas = await window.html2canvas(target, { scale: 2 });
         const a = document.createElement("a");
@@ -1317,28 +587,8 @@ async function renderMemberTab() {
 }
 
 /** =========================
- * ADMIN (combined): Open/Close + Membership admin
+ * ADMIN UI
  * ========================= */
-function updateAdminStoreBadge(){
-  const badge = document.getElementById("storeBadge");
-  if(!badge) return;
-  badge.textContent = storeOpen ? "OPEN" : "CLOSED";
-  badge.className = "badge " + (storeOpen ? "ok" : "bad");
-}
-
-async function setStoreOpen(flag){
-  const isAdmin = !!(state.adminUser && (state.adminUser.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase());
-  if(!isAdmin){
-    await iosAlert("Akses ditolak", "Hanya admin yang bisa mengubah status.");
-    return;
-  }
-  await setDoc(
-    doc(db, STORE_DOC_PATH[0], STORE_DOC_PATH[1]),
-    { open: !!flag, updatedAt: serverTimestamp() },
-    { merge: true }
-  );
-}
-
 function renderAdminLogin() {
   $app.innerHTML = `
     <div class="card">
@@ -1353,7 +603,7 @@ function renderAdminLogin() {
     const $msg = document.getElementById("msg");
     try {
       const res = await signInWithPopup(auth, provider);
-      if ((res.user.email || "").toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      if (res.user.email !== ADMIN_EMAIL) {
         await signOut(auth);
         $msg.textContent = "❌ Email ini bukan admin.";
       }
@@ -1369,26 +619,12 @@ async function renderAdminPanel() {
       <div class="row space">
         <div>
           <h2>Admin Panel</h2>
-          <p class="muted">Order OPEN/CLOSE + Approve membership, approve redeem, kelola poin & voucher.</p>
+          <p class="muted">Approve pendaftaran, approve redeem, kelola poin & voucher.</p>
         </div>
-        <a class="badge link" href="#membership">Public</a>
+        <a class="badge link" href="#">Public</a>
       </div>
 
-      <div class="subcard" style="margin-top:10px">
-        <div class="row space">
-          <div>
-            <h3>Order Status</h3>
-            <p class="muted">Status pemesanan global.</p>
-          </div>
-          <span id="storeBadge" class="badge">—</span>
-        </div>
-        <div class="row">
-          <button class="btn secondary" id="btnSetOpen">OPEN</button>
-          <button class="btn danger" id="btnSetClose">CLOSE</button>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px">
+      <div class="row">
         <button class="btn secondary" id="refresh">Refresh</button>
       </div>
 
@@ -1424,11 +660,6 @@ async function renderAdminPanel() {
       </div>
     </div>
   `;
-
-  updateAdminStoreBadge();
-
-  document.getElementById("btnSetOpen").onclick = () => setStoreOpen(true);
-  document.getElementById("btnSetClose").onclick = () => setStoreOpen(false);
 
   document.getElementById("refresh").onclick = () => renderAdminPanel();
   document.getElementById("rReg").onclick = () => loadPendingRegistrations();
@@ -1471,14 +702,8 @@ async function renderAdminPanel() {
       <div id="voucherAdminList"></div>
     `;
 
-    document.getElementById("pMinus").onclick = async () => {
-      await updatePoints(code, -10);
-      document.getElementById("loadMember").click();
-    };
-    document.getElementById("pPlus").onclick  = async () => {
-      await updatePoints(code, +10);
-      document.getElementById("loadMember").click();
-    };
+    document.getElementById("pMinus").onclick = async () => { await updatePoints(code, -10); document.getElementById("loadMember").click(); };
+    document.getElementById("pPlus").onclick  = async () => { await updatePoints(code, +10); document.getElementById("loadMember").click(); };
 
     const vwrap = document.getElementById("voucherAdminList");
     if (vouchers.length === 0) {
@@ -1507,9 +732,7 @@ async function renderAdminPanel() {
             </div>
 
             <div class="row">
-              <button class="btn secondary" data-toggle="${escapeHtml(v.code)}">
-                ${used ? "Undo Used" : "Mark Used"}
-              </button>
+              <button class="btn secondary" data-toggle="${escapeHtml(v.code)}">${used ? "Undo Used" : "Mark Used"}</button>
               <button class="btn danger" data-del="${escapeHtml(v.code)}">Hapus</button>
             </div>
           </div>
@@ -1537,7 +760,6 @@ async function renderAdminPanel() {
 /** ✅ NO orderBy to avoid composite index */
 async function loadPendingRegistrations() {
   const el = document.getElementById("regList");
-  if(!el) return;
   el.textContent = "Loading...";
 
   try {
@@ -1646,7 +868,6 @@ async function approveRegistration(requestId) {
 /** ✅ NO orderBy to avoid composite index */
 async function loadPendingRedeems() {
   const el = document.getElementById("redeemList");
-  if(!el) return;
   el.textContent = "Loading...";
 
   try {
@@ -1708,6 +929,7 @@ async function loadPendingRedeems() {
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
 function pad5(n) {
   return String(n).padStart(5, "0");
 }
@@ -1724,6 +946,7 @@ async function generateUniqueVoucherCode(points) {
     if (!snap.exists()) return code;
   }
 
+  // fallback
   const r = pad5((Date.now() % 99999) + 1);
   return `TPG${p}VCMEM${r}`;
 }
@@ -1743,6 +966,7 @@ async function approveRedeem(redeemRequestId) {
   }
 
   const discountRp = pointsToSpend * DISCOUNT_PER_POINT_RP;
+
   const voucherCode = await generateUniqueVoucherCode(pointsToSpend);
   const approvedAt = new Date();
   const expiresAt = new Date(approvedAt.getTime() + 7*24*60*60*1000);
@@ -1893,10 +1117,9 @@ async function adminDeleteVoucher(memberCode, voucherCode) {
 }
 
 /** =========================
- * Router (FINAL)
+ * Router
  * ========================= */
 function render() {
-  // route admin?
   state.isAdminRoute = isAdminRoute();
   setTopbar();
 
@@ -1906,40 +1129,16 @@ function render() {
     return;
   }
 
-  // route public: order vs membership
-  // aturan:
-  // - #order => halaman order
-  // - #membership (default) => halaman membership
-  const h = (location.hash || "").toLowerCase();
-
-  // default public route
-  if (!h || h === "#" || h === "#membership") {
-    // kalau user belum pilih view apapun, tetap ke landing membership
-    if (!state.publicView) state.publicView = "landing";
-  }
-
-  // jika user pilih order
-  if (h === "#order") {
-    renderOrderPage(); // pastikan function ini ada di part sebelumnya
-    return;
-  }
-
-  // public membership router (as-is)
   if (state.publicView === "landing") return renderPublicLanding();
   if (state.publicView === "register") return renderPublicRegister();
   if (state.publicView === "lookup") return renderPublicLookup();
   if (state.publicView === "member") return renderMemberPage();
-
-  // fallback
-  state.publicView = "landing";
   renderPublicLanding();
 }
 
 onAuthStateChanged(auth, (user) => {
-  if (user && (user.email || "").toLowerCase() === ADMIN_EMAIL.toLowerCase()) state.adminUser = user;
+  if (user && user.email === ADMIN_EMAIL) state.adminUser = user;
   else state.adminUser = null;
-
-  // render ulang agar admin panel kebaca
   render();
 });
 
