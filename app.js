@@ -1,7 +1,5 @@
 /* ===============================
-   TPG Card Membership – FINAL
-   Public: daftar, login (lookup member code), redeem request
-   Admin (#admin): Google login (admin-only), approve member, approve redeem, manage points & vouchers
+   TPG Card Membership – FINAL (No Index Needed)
    =============================== */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
@@ -12,11 +10,9 @@ import {
   setDoc,
   addDoc,
   updateDoc,
-  deleteDoc,
   collection,
   query,
   where,
-  orderBy,
   limit,
   getDocs,
   serverTimestamp,
@@ -63,7 +59,7 @@ const state = {
   // public
   publicView: "landing", // landing | register | lookup | member
   memberCode: "",
-  member: null, // membersPublic doc data
+  member: null,
   memberTab: "vouchers" // vouchers | redeem
 };
 
@@ -159,10 +155,10 @@ function renderPublicRegister() {
       </div>
 
       <label>Nama / Inisial</label>
-      <input class="input" id="name" placeholder="Contoh: Dini" />
+      <input class="input" id="name" placeholder="Contoh: Aly" />
 
       <label>Username Telegram</label>
-      <input class="input" id="tg" placeholder="Contoh: @dinijanuari23" />
+      <input class="input" id="tg" placeholder="Contoh: @heiart" />
 
       <div class="row">
         <button class="btn" id="submit">Kirim Permintaan</button>
@@ -181,15 +177,18 @@ function renderPublicRegister() {
     if (!name || !telegramUsername) { $msg.textContent = "Mohon isi semua data."; return; }
     if (!telegramUsername.startsWith("@")) telegramUsername = "@" + telegramUsername;
 
-    await addDoc(collection(db, "requests"), {
-      name,
-      telegramUsername,
-      status: "pending",
-      createdAt: serverTimestamp()
-    });
-
-    $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan admin.";
-    document.getElementById("submit").disabled = true;
+    try {
+      await addDoc(collection(db, "requests"), {
+        name,
+        telegramUsername,
+        status: "pending",
+        createdAt: serverTimestamp()
+      });
+      $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan admin.";
+      document.getElementById("submit").disabled = true;
+    } catch (e) {
+      $msg.textContent = "❌ Gagal mengirim. (permission denied / rules belum publish)";
+    }
   };
 }
 
@@ -309,14 +308,18 @@ function renderMemberTab() {
 
     document.getElementById("sendRedeem")?.addEventListener("click", async () => {
       const $msg = document.getElementById("redeemMsg");
-      await addDoc(collection(db, "redeemRequests"), {
-        memberCode: state.memberCode,
-        pointsToSpend: 100,
-        status: "pending",
-        createdAt: serverTimestamp()
-      });
-      $msg.textContent = "✅ Permintaan redeem terkirim. Tunggu admin ACC.";
-      document.getElementById("sendRedeem").disabled = true;
+      try {
+        await addDoc(collection(db, "redeemRequests"), {
+          memberCode: state.memberCode,
+          pointsToSpend: 100,
+          status: "pending",
+          createdAt: serverTimestamp()
+        });
+        $msg.textContent = "✅ Permintaan redeem terkirim. Tunggu admin ACC.";
+        document.getElementById("sendRedeem").disabled = true;
+      } catch {
+        $msg.textContent = "❌ Gagal kirim redeem (permission denied / rules).";
+      }
     });
 
     return;
@@ -361,7 +364,6 @@ function renderMemberTab() {
 
           <p class="muted" id="vmsg-${idx}"></p>
 
-          <!-- capture target -->
           <div class="captureWrap">
             <div class="card capture" id="cap-${idx}">
               <div class="row space">
@@ -435,7 +437,7 @@ function renderAdminLogin() {
         await signOut(auth);
         $msg.textContent = "❌ Email ini bukan admin.";
       }
-    } catch {
+    } catch (e) {
       $msg.textContent = "❌ Gagal login.";
     }
   };
@@ -525,7 +527,7 @@ async function renderAdminPanel() {
       <hr class="sep" />
 
       <h3>Voucher Member</h3>
-      <p class="muted">Di sini kamu bisa set Used/Undo, atau hapus manual. Voucher kadaluarsa tetap tampil di user, tapi tombol copy/save user akan disable.</p>
+      <p class="muted">Set Used/Undo, atau hapus manual.</p>
 
       <div id="voucherAdminList"></div>
     `;
@@ -584,53 +586,64 @@ async function renderAdminPanel() {
   };
 }
 
+/** ✅ NO orderBy to avoid composite index */
 async function loadPendingRegistrations() {
   const el = document.getElementById("regList");
-  const qy = query(
-    collection(db, "requests"),
-    where("status","==","pending"),
-    orderBy("createdAt","desc"),
-    limit(30)
-  );
-  const snap = await getDocs(qy);
+  el.textContent = "Loading...";
 
-  if (snap.empty) { el.textContent = "Tidak ada pending pendaftaran."; return; }
+  try {
+    const qy = query(
+      collection(db, "requests"),
+      where("status","==","pending"),
+      limit(30)
+    );
+    const snap = await getDocs(qy);
 
-  el.innerHTML = `
-    <table class="table">
-      <thead><tr><th>Nama</th><th>Telegram</th><th>Aksi</th></tr></thead>
-      <tbody>
-        ${snap.docs.map(d => {
-          const r = d.data();
-          return `
-            <tr>
-              <td>${escapeHtml(r.name ?? "-")}</td>
-              <td class="mono">${escapeHtml(r.telegramUsername ?? "-")}</td>
-              <td>
-                <button class="btn secondary" data-acc="${d.id}">ACC</button>
-                <button class="btn danger" data-rej="${d.id}">Tolak</button>
-              </td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
-    <p class="muted">Saat ACC: isi Telegram ID → memberCode auto jadi <span class="mono">TPGCARD&lt;ID&gt;</span>.</p>
-  `;
+    if (snap.empty) { el.textContent = "Tidak ada pending pendaftaran."; return; }
 
-  el.querySelectorAll("[data-acc]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await approveRegistration(btn.getAttribute("data-acc"));
-      await loadPendingRegistrations();
+    el.innerHTML = `
+      <table class="table">
+        <thead><tr><th>Nama</th><th>Telegram</th><th>Aksi</th></tr></thead>
+        <tbody>
+          ${snap.docs.map(d => {
+            const r = d.data();
+            const tg = r.telegramUsername ?? r.telegram_username ?? "-";
+            return `
+              <tr>
+                <td>${escapeHtml(r.name ?? "-")}</td>
+                <td class="mono">${escapeHtml(tg)}</td>
+                <td>
+                  <button class="btn secondary" data-acc="${d.id}">ACC</button>
+                  <button class="btn danger" data-rej="${d.id}">Tolak</button>
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+      <p class="muted">Saat ACC: isi Telegram ID → memberCode auto jadi <span class="mono">TPGCARD&lt;ID&gt;</span>.</p>
+    `;
+
+    el.querySelectorAll("[data-acc]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await approveRegistration(btn.getAttribute("data-acc"));
+        await loadPendingRegistrations();
+      });
     });
-  });
 
-  el.querySelectorAll("[data-rej]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await rejectDoc("requests", btn.getAttribute("data-rej"));
-      await loadPendingRegistrations();
+    el.querySelectorAll("[data-rej]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await rejectDoc("requests", btn.getAttribute("data-rej"));
+        await loadPendingRegistrations();
+      });
     });
-  });
+
+  } catch (err) {
+    el.innerHTML = `
+      <div class="muted">❌ Gagal load pending pendaftaran.</div>
+      <div class="muted mono" style="margin-top:6px">${escapeHtml(err?.message || err)}</div>
+    `;
+  }
 }
 
 async function approveRegistration(requestId) {
@@ -647,10 +660,12 @@ async function approveRegistration(requestId) {
   const expiresAt = new Date(approvedAt.getTime());
   expiresAt.setMonth(expiresAt.getMonth() + 6);
 
+  const telegramUsername = (r.telegramUsername ?? r.telegram_username ?? "");
+
   await setDoc(doc(db, "members", memberCode), {
     memberCode,
     name: r.name ?? "",
-    telegramUsername: r.telegramUsername ?? "",
+    telegramUsername,
     telegramId: String(telegramId).trim(),
     approvedAt,
     expiresAt,
@@ -674,52 +689,62 @@ async function approveRegistration(requestId) {
   });
 }
 
+/** ✅ NO orderBy to avoid composite index */
 async function loadPendingRedeems() {
   const el = document.getElementById("redeemList");
-  const qy = query(
-    collection(db, "redeemRequests"),
-    where("status","==","pending"),
-    orderBy("createdAt","desc"),
-    limit(40)
-  );
-  const snap = await getDocs(qy);
+  el.textContent = "Loading...";
 
-  if (snap.empty) { el.textContent = "Tidak ada pending redeem."; return; }
+  try {
+    const qy = query(
+      collection(db, "redeemRequests"),
+      where("status","==","pending"),
+      limit(40)
+    );
+    const snap = await getDocs(qy);
 
-  el.innerHTML = `
-    <table class="table">
-      <thead><tr><th>MemberCode</th><th>Poin</th><th>Aksi</th></tr></thead>
-      <tbody>
-        ${snap.docs.map(d => {
-          const rr = d.data();
-          return `
-            <tr>
-              <td class="mono">${escapeHtml(rr.memberCode)}</td>
-              <td>${escapeHtml(rr.pointsToSpend ?? 100)}</td>
-              <td>
-                <button class="btn secondary" data-acc="${d.id}">ACC</button>
-                <button class="btn danger" data-rej="${d.id}">Tolak</button>
-              </td>
-            </tr>
-          `;
-        }).join("")}
-      </tbody>
-    </table>
-  `;
+    if (snap.empty) { el.textContent = "Tidak ada pending redeem."; return; }
 
-  el.querySelectorAll("[data-acc]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await approveRedeem(btn.getAttribute("data-acc"));
-      await loadPendingRedeems();
+    el.innerHTML = `
+      <table class="table">
+        <thead><tr><th>MemberCode</th><th>Poin</th><th>Aksi</th></tr></thead>
+        <tbody>
+          ${snap.docs.map(d => {
+            const rr = d.data();
+            return `
+              <tr>
+                <td class="mono">${escapeHtml(rr.memberCode)}</td>
+                <td>${escapeHtml(rr.pointsToSpend ?? 100)}</td>
+                <td>
+                  <button class="btn secondary" data-acc="${d.id}">ACC</button>
+                  <button class="btn danger" data-rej="${d.id}">Tolak</button>
+                </td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+
+    el.querySelectorAll("[data-acc]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await approveRedeem(btn.getAttribute("data-acc"));
+        await loadPendingRedeems();
+      });
     });
-  });
 
-  el.querySelectorAll("[data-rej]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await rejectDoc("redeemRequests", btn.getAttribute("data-rej"));
-      await loadPendingRedeems();
+    el.querySelectorAll("[data-rej]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await rejectDoc("redeemRequests", btn.getAttribute("data-rej"));
+        await loadPendingRedeems();
+      });
     });
-  });
+
+  } catch (err) {
+    el.innerHTML = `
+      <div class="muted">❌ Gagal load pending redeem.</div>
+      <div class="muted mono" style="margin-top:6px">${escapeHtml(err?.message || err)}</div>
+    `;
+  }
 }
 
 function randInt(min, max) {
@@ -727,7 +752,6 @@ function randInt(min, max) {
 }
 
 async function generateUniqueVoucherCode() {
-  // Unik berdasarkan dokumen tracking /vouchers (admin-only)
   for (let i = 0; i < 30; i++) {
     const n = randInt(1, 99999);
     const code = `TPGVOUCHMEMBER${n}`;
@@ -748,7 +772,7 @@ async function approveRedeem(redeemRequestId) {
 
   const voucherCode = await generateUniqueVoucherCode();
   const approvedAt = new Date();
-  const expiresAt = new Date(approvedAt.getTime() + 7*24*60*60*1000); // 7 hari
+  const expiresAt = new Date(approvedAt.getTime() + 7*24*60*60*1000);
 
   await runTransaction(db, async (tx) => {
     const privRef = doc(db, "members", memberCode);
@@ -801,8 +825,6 @@ async function approveRedeem(redeemRequestId) {
       voucherCode
     });
   });
-
-  // after approve, optional: nothing
 }
 
 async function rejectDoc(colName, id) {
