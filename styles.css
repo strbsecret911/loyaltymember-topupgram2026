@@ -54,6 +54,13 @@ body{
 .brand-title{font-weight:900; font-size:15px}
 .brand-sub{color:var(--muted); font-size:11px}
 
+/* topbar right (biar badge/tombol rapi) */
+.topbar-right{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
 /* ===== Layout ===== */
 .container{
   max-width:920px;
@@ -347,6 +354,13 @@ hr.sep{
   #redeemMsg{
     margin-top:10px;
   }
+
+  /* tombol umum di mobile sedikit lebih empuk */
+  .btn{
+    padding: 12px;
+    border-radius: 14px;
+    font-size: 13px;
+  }
 }
 
 /* kalau ada elemen pesan redeem yang kamu jadikan box (opsional, aman walau id gak ada) */
@@ -410,21 +424,10 @@ hr.sep{
   margin-top: 12px;
 }
 
-/* Tombol full-width khusus halaman public (Masuk / Daftar) */
-.card .btn{
-  width: 100%;
-}
+/* jangan bikin semua tombol di card full-width (ini yang bikin tombol tabel admin jadi jelek) */
+/* .card .btn{ width:100%; } */
 
-/* Tapi jangan ganggu tombol kecil di admin / voucher */
+/* tombol di row tetap normal */
 .row .btn{
   width: auto;
-}
-
-/* Tombol Cari & Kirim lebih empuk di mobile */
-@media (max-width: 520px){
-  .card .btn{
-    padding: 12px;
-    border-radius: 14px;
-    font-size: 13px;
-  }
 }
