@@ -109,7 +109,15 @@ function setTopbar() {
   `;
   document.getElementById("btnLogout")?.addEventListener("click", () => signOut(auth));
 }
-// ===== iOS-like Modal (Alert / Confirm / Prompt) =====
+
+/** ✅ FIX: reload memberPublic supaya status voucher update (used/delete) kebaca di member UI */
+async function reloadMemberPublic() {
+  if (!state.memberCode) return;
+  const snap = await getDoc(doc(db, "membersPublic", state.memberCode));
+  if (snap.exists()) state.member = snap.data();
+}
+
+/** ===== iOS-like Modal (Alert / Confirm / Prompt) ===== */
 function ensureIosModal() {
   if (document.getElementById("iosModal")) return;
 
@@ -133,10 +141,9 @@ function ensureIosModal() {
   `;
   document.body.appendChild(wrap);
 
-  // close when tap backdrop (optional)
   document.getElementById("iosBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "iosBackdrop") {
-      // do nothing by default (safer)
+      // no-op
     }
   });
 }
@@ -173,7 +180,6 @@ function iosModal({ title="Notification", message="", input=false, placeholder="
     btnOk.className = "ios-btn ios-ok" + (danger ? " ios-danger" : "");
     btnOk.textContent = okText;
 
-    // for alert mode (no cancel)
     if (cancelText) actions.appendChild(btnCancel);
     actions.appendChild(btnOk);
 
@@ -201,12 +207,10 @@ function iosModal({ title="Notification", message="", input=false, placeholder="
 async function iosAlert(title, message, okText="OK") {
   await iosModal({ title, message, input:false, okText, cancelText:"" });
 }
-
 async function iosConfirm(title, message, okText="OK", cancelText="Cancel", danger=false) {
   const res = await iosModal({ title, message, input:false, okText, cancelText, danger });
   return res.ok;
 }
-
 async function iosPrompt(title, message, placeholder="", okText="OK", cancelText="Cancel") {
   const res = await iosModal({ title, message, input:true, placeholder, okText, cancelText });
   if (!res.ok) return null;
@@ -230,7 +234,9 @@ function renderPublicLanding() {
       <hr class="sep" />
 
       <div class="note">
-        <b>Catatan:</b> Daftar jika belum punya "Member code". Masuk jika sudah pernah daftar.</div>
+        <b>Catatan:</b> Daftar jika belum punya "Member code". Masuk jika sudah pernah daftar.
+      </div>
+    </div>
   `;
 
   document.getElementById("goRegister").onclick = () => { state.publicView = "register"; render(); };
@@ -354,6 +360,7 @@ function renderMemberPage() {
       <div class="tabs">
         <button class="tab ${state.memberTab==="vouchers"?"active":""}" id="tabV">Voucher Saya</button>
         <button class="tab ${state.memberTab==="redeem"?"active":""}" id="tabR">Redeem</button>
+        <button class="tab" id="tabRefresh">Refresh</button>
       </div>
 
       <div id="memberTabContent"></div>
@@ -369,14 +376,18 @@ function renderMemberPage() {
 
   document.getElementById("tabV").onclick = () => { state.memberTab="vouchers"; renderMemberTab(); };
   document.getElementById("tabR").onclick = () => { state.memberTab="redeem"; renderMemberTab(); };
+  document.getElementById("tabRefresh").onclick = async () => { await reloadMemberPublic(); renderMemberPage(); };
 
   renderMemberTab();
 }
 
-function renderMemberTab() {
+/** ✅ FIX: bikin async + reload memberPublic sebelum render voucher list */
+async function renderMemberTab() {
   const wrap = document.getElementById("memberTabContent");
-  const m = state.member;
   if (!wrap) return;
+
+  await reloadMemberPublic();
+  const m = state.member;
 
   if (state.memberTab === "redeem") {
     const membershipExpired = nowMs() > tsMs(m.expiresAt);
@@ -432,6 +443,7 @@ function renderMemberTab() {
     .map((v, idx) => {
       const expired = nowMs() > tsMs(v.expiresAt);
       const used = !!v.used;
+
       const status = used ? "Dipakai" : (expired ? "Kadaluarsa" : "Aktif");
       const cls = used ? "bad" : (expired ? "warn" : "ok");
       const disabled = used || expired;
@@ -975,14 +987,15 @@ async function adminToggleUsed(memberCode, voucherCode) {
     const curUsed = !!vouchers[idx].used;
     const nextUsed = !curUsed;
 
+    const usedAt = nextUsed ? new Date() : null;
     vouchers[idx].used = nextUsed;
-    vouchers[idx].usedAt = nextUsed ? new Date() : null;
+    vouchers[idx].usedAt = usedAt;
 
     tx.update(pubRef, { vouchers });
 
     const vSnap = await tx.get(vRef);
     if (vSnap.exists()) {
-      tx.update(vRef, { used: nextUsed, usedAt: nextUsed ? new Date() : null });
+      tx.update(vRef, { used: nextUsed, usedAt });
     }
   });
 }
@@ -1006,10 +1019,14 @@ async function adminDeleteVoucher(memberCode, voucherCode) {
 
     const pub = pubSnap.data();
     const vouchers = Array.isArray(pub.vouchers) ? pub.vouchers : [];
+
+    /** ✅ FIX: pakai filtered, bukan vouchers lama */
     const filtered = vouchers.filter(v => v.code !== voucherCode);
 
-    tx.update(pubRef, { vouchers });
+    /** ✅ FIX: update array yang sudah difilter */
+    tx.update(pubRef, { vouchers: filtered });
 
+    /** delete doc voucher (kalau rules mengizinkan) */
     const vSnap = await tx.get(vRef);
     if (vSnap.exists()) tx.delete(vRef);
   });
