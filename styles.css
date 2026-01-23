@@ -356,3 +356,75 @@ hr.sep{
   border:1px dashed var(--line);
   background:#fff;
 }
+
+/* ===== Redeem panel spacing fix (biar nggak mepet) ===== */
+
+/* Semua subcard: kasih jarak antar blok */
+.subcard > * + *{
+  margin-top: 10px;
+}
+
+/* Judul subcard jangan terlalu nempel */
+.subcard h3{
+  margin:0;
+  padding:0;
+}
+
+/* Paragraf muted di subcard lebih rapih */
+.subcard .muted{
+  margin:0;
+}
+
+/* Label + input jaraknya konsisten */
+.subcard label{
+  margin:0;
+  font-size:11px;
+}
+.subcard .input{
+  margin-top:6px;
+}
+
+/* Tombol di panel redeem kasih jarak & tinggi nyaman */
+#sendRedeem{
+  margin-top: 8px;
+}
+
+/* Pesan/error box redeem jangan mepet & keliatan sebagai box */
+#redeemMsg{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: #fff;
+}
+
+/* Kalau pesan kosong, jangan makan tempat (opsional) */
+#redeemMsg:empty{
+  display:none;
+}
+
+/* ===== Lookup / Login spacing fix ===== */
+
+/* Input + tombol Cari jangan nempel */
+.input + .btn{
+  margin-top: 12px;
+}
+
+/* Tombol full-width khusus halaman public (Masuk / Daftar) */
+.card .btn{
+  width: 100%;
+}
+
+/* Tapi jangan ganggu tombol kecil di admin / voucher */
+.row .btn{
+  width: auto;
+}
+
+/* Tombol Cari & Kirim lebih empuk di mobile */
+@media (max-width: 520px){
+  .card .btn{
+    padding: 12px;
+    border-radius: 14px;
+    font-size: 13px;
+  }
+}
