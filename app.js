@@ -219,27 +219,18 @@ async function iosPrompt(title, message, placeholder="", okText="OK", cancelText
 function renderPublicLanding() {
   $app.innerHTML = `
     <div class="card">
-      <h1>TPG Card</h1>
+      <h1>TOPUPGRAM Member Card</h1>
       <p class="muted">Membership • Poin • Voucher</p>
 
       <div class="row">
         <button class="btn" id="goRegister">Daftar</button>
-        <button class="btn secondary" id="goLookup">Login</button>
+        <button class="btn secondary" id="goLookup">Masuk</button>
       </div>
 
       <hr class="sep" />
 
       <div class="note">
-        <b>Catatan:</b> Login di sini adalah <i>mencari data membership</i> memakai kode member.
-      </div>
-
-      <div class="mini">
-        <div>${badge("Redeem")}&nbsp; Minimal <b>100 poin</b></div>
-        <div>${badge("Diskon")}&nbsp; 100 poin = <b>Rp1.000</b></div>
-        <div>${badge("Voucher")}&nbsp; <span class="mono">TPGVOUCHMEMBER(1-99999)</span></div>
-        <div>${badge("Masa berlaku")}&nbsp; 1 minggu setelah ACC admin</div>
-      </div>
-    </div>
+        <b>Catatan:</b> Daftar jika belum punya "Member code". Masuk jika sudah pernah daftar.</div>
   `;
 
   document.getElementById("goRegister").onclick = () => { state.publicView = "register"; render(); };
@@ -290,7 +281,7 @@ function renderPublicRegister() {
       $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan admin.";
       document.getElementById("submit").disabled = true;
     } catch (e) {
-      $msg.textContent = "❌ Gagal mengirim. (permission denied / rules belum publish)";
+      $msg.textContent = "❌ Gagal mengirim.";
     }
   };
 }
@@ -300,8 +291,8 @@ function renderPublicLookup() {
     <div class="card">
       <div class="row space">
         <div>
-          <h2>Login</h2>
-          <p class="muted">Masukkan kode membership untuk melihat kartu member.</p>
+          <h2>Masuk</h2>
+          <p class="muted">Masukkan kode membership (member code) untuk melihat kartu member.</p>
         </div>
         <button class="btn secondary" id="back">Kembali</button>
       </div>
@@ -324,7 +315,7 @@ function renderPublicLookup() {
     if (!code) { $msg.textContent = "Mohon isi kode."; return; }
 
     const snap = await getDoc(doc(db, "membersPublic", code));
-    if (!snap.exists()) { $msg.textContent = "❌ Kode tidak ditemukan / belum aktif."; return; }
+    if (!snap.exists()) { $msg.textContent = "❌ Kode tidak ditemukan / belum aktif. Silahkan Daftar terlebih dahulu."; return; }
 
     state.memberCode = code;
     state.member = snap.data();
@@ -395,7 +386,7 @@ function renderMemberTab() {
     wrap.innerHTML = `
       <div class="subcard">
         <h3>Redeem Voucher</h3>
-        <p class="muted">Minimal 100 poin → diskon Rp1.000. Permintaan akan diproses admin.</p>
+        <p class="muted">Minimal 100 poin → diskon Rp1.000.</p>
 
         <div class="row">
           <button class="btn" id="sendRedeem" ${canRedeem ? "" : "disabled"}>
@@ -418,10 +409,10 @@ function renderMemberTab() {
           status: "pending",
           createdAt: serverTimestamp()
         });
-        $msg.textContent = "✅ Permintaan redeem terkirim. Tunggu admin ACC.";
+        $msg.textContent = "✅ Permintaan redeem terkirim. Mohon tunggu & refresh halaman.";
         document.getElementById("sendRedeem").disabled = true;
       } catch {
-        $msg.textContent = "❌ Gagal kirim redeem (permission denied / rules).";
+        $msg.textContent = "❌ Gagal kirim redeem (permission denied).";
       }
     });
 
@@ -526,7 +517,7 @@ function renderAdminLogin() {
   $app.innerHTML = `
     <div class="card">
       <h2>Admin Panel</h2>
-      <p class="muted">Login Google. Hanya <b>${escapeHtml(ADMIN_EMAIL)}</b> yang bisa akses.</p>
+      <p class="muted">Login Google. Hanya owner TOPUPGRAM yang bisa akses.</p>
       <button class="btn" id="btnGoogle">Login Google</button>
       <p class="muted" id="msg"></p>
     </div>
