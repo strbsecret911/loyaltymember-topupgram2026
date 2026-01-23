@@ -16,8 +16,7 @@ import {
   limit,
   getDocs,
   serverTimestamp,
-  runTransaction,
-  onSnapshot
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 import {
@@ -71,8 +70,6 @@ const state = {
   memberCode: "",
   member: null,
   memberTab: "vouchers", // vouchers | redeem
-  
-  liveUnsub: null
 
   // PIN gate
   memberUnlocked: false
@@ -135,39 +132,6 @@ async function reloadMemberPublic() {
   if (!state.memberCode) return;
   const snap = await getDoc(doc(db, "membersPublic", state.memberCode));
   if (snap.exists()) state.member = snap.data();
-}
-
-function stopLiveMember() {
-  if (typeof state.liveUnsub === "function") {
-    try { state.liveUnsub(); } catch(e) {}
-  }
-  state.liveUnsub = null;
-}
-
-function startLiveMember(memberCode) {
-  stopLiveMember();
-  if (!memberCode) return;
-
-  const ref = doc(db, "membersPublic", memberCode);
-
-  state.liveUnsub = onSnapshot(ref, (snap) => {
-    if (!snap.exists()) return;
-
-    state.member = snap.data();
-
-    // update UI otomatis jika sedang di halaman member
-    if (state.publicView === "member") {
-      // kalau tab content ada, cukup rerender tab
-      if (document.getElementById("memberTabContent")) {
-        renderMemberTab(true); // true = skip reload
-      } else {
-        renderMemberPage();
-      }
-    }
-  }, (err) => {
-    // kalau permission / offline / dll, stop listener biar ga spam
-    stopLiveMember();
-  });
 }
 
 /** ===== iOS-like Modal (Alert / Confirm / Prompt) ===== */
@@ -455,7 +419,7 @@ function renderPublicLookup() {
 
     // restore unlock state (per session)
     try { state.memberUnlocked = sessionStorage.getItem(sessionKey(code)) === "1"; } catch { state.memberUnlocked = false; }
-    startLiveMember(code);
+
     render();
   };
 }
@@ -499,7 +463,8 @@ function renderMemberPage() {
   `;
 
   document.getElementById("logout").onclick = () => {
-    stopLiveMember();
+    // reset + clear session unlock for privacy
+    resetMemberUnlockState(true);
     state.member = null;
     state.memberCode = "";
     state.publicView = "lookup";
@@ -532,11 +497,11 @@ function renderMemberPage() {
 }
 
 /** ✅ async + reload memberPublic sebelum render voucher list */
-async function renderMemberTab(skipReload = false) {
+async function renderMemberTab() {
   const wrap = document.getElementById("memberTabContent");
   if (!wrap) return;
 
-  if (!skipReload) await reloadMemberPublic();
+  await reloadMemberPublic();
   const m = state.member;
 
   // PIN gate: voucher & redeem hanya kalau unlocked
