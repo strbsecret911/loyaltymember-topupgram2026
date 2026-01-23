@@ -79,9 +79,9 @@ body{
 /* ===== Typography ===== */
 h1{margin:0 0 4px; font-size:20px}
 h2{margin:0 0 4px; font-size:16px}
-h3{margin:0 0 4px; font-size:14px}
+h3{margin:0 0 6px; font-size:14px}
 
-.muted{color:var(--muted); margin:4px 0}
+.muted{color:var(--muted); margin:6px 0}
 .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .code{font-size:15px; font-weight:800; letter-spacing:.3px}
 
@@ -90,12 +90,12 @@ label{
   display:block;
   color:var(--muted);
   font-size:11px;
-  margin:8px 0 4px;
+  margin:10px 0 6px;
 }
 .input{
   width:100%;
-  padding:9px 10px;
-  border-radius:10px;
+  padding:10px 12px;
+  border-radius:12px;
   border:1px solid var(--line);
   background:#fff;
   font-size:13px;
@@ -105,9 +105,9 @@ label{
 .btn{
   border:0;
   cursor:pointer;
-  padding:8px 12px;
-  border-radius:10px;
-  font-weight:700;
+  padding:9px 12px;
+  border-radius:12px;
+  font-weight:800;
   font-size:12px;
   background:var(--btn);
   color:#fff;
@@ -118,18 +118,18 @@ label{
   border:1px solid var(--line);
 }
 .btn.danger{background:var(--bad)}
-.btn:disabled{opacity:.5}
+.btn:disabled{opacity:.55; cursor:not-allowed}
 
 /* ===== Badges ===== */
 .badge{
   display:inline-flex; align-items:center;
-  padding:4px 8px;
+  padding:5px 10px;
   border-radius:999px;
   border:1px solid var(--line);
   background:#fff;
   color:var(--muted);
   font-size:11px;
-  font-weight:600;
+  font-weight:700;
 }
 .badge.ok{color:var(--ok)}
 .badge.bad{color:var(--bad)}
@@ -137,7 +137,12 @@ label{
 .badge.link{text-decoration:none}
 
 /* ===== Utilities ===== */
-.row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
 .space{justify-content:space-between}
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 @media(max-width:860px){.grid2{grid-template-columns:1fr}}
@@ -145,28 +150,34 @@ label{
 hr.sep{
   border:0;
   border-top:1px solid var(--line);
-  margin:10px 0;
+  margin:12px 0;
 }
 
 /* ===== Key-Value ===== */
 .kv{
   display:grid;
   grid-template-columns:120px 1fr;
-  gap:6px 10px;
+  gap:8px 10px;
   font-size:12px;
+  margin-top:4px;
 }
 .kv .k{color:var(--muted)}
-.kv .v{font-weight:700}
+.kv .v{font-weight:800}
 
 /* ===== Tabs ===== */
-.tabs{display:flex; gap:6px; margin-top:10px}
+.tabs{
+  display:flex;
+  gap:8px;
+  margin-top:12px;
+  flex-wrap:wrap;
+}
 .tab{
   border:1px solid var(--line);
   background:#fff;
   color:var(--muted);
-  padding:7px 10px;
+  padding:8px 12px;
   border-radius:999px;
-  font-weight:800;
+  font-weight:900;
   font-size:11px;
   cursor:pointer;
 }
@@ -180,12 +191,44 @@ hr.sep{
 .table{width:100%; border-collapse:collapse; font-size:12px}
 .table th,.table td{
   border-bottom:1px solid var(--line);
-  padding:8px 6px;
+  padding:9px 7px;
   text-align:left;
 }
 .table th{
   color:var(--muted);
-  font-weight:800;
+  font-weight:900;
+}
+
+/* ===== Note box (landing catatan) ===== */
+.note{
+  margin-top:12px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#F9FBFD;
+}
+
+/* ===== Mini info list (landing rules) ===== */
+.mini{
+  margin-top:12px;
+  display:grid;
+  gap:10px;
+}
+.mini > div{
+  display:grid;
+  grid-template-columns: auto 1fr;
+  gap:10px;
+  align-items:center;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+}
+.mini .badge{
+  background: var(--btn2);
+  color: var(--primary);
+  border-color: var(--line);
+  font-weight:900;
 }
 
 /* ===== Capture ===== */
@@ -214,6 +257,7 @@ hr.sep{
   background:#fff;
   border-radius:16px;
   box-shadow:0 20px 50px rgba(0,0,0,.25);
+  overflow:hidden;
 }
 .ios-head{
   padding:14px 14px 8px;
@@ -221,20 +265,21 @@ hr.sep{
 }
 .ios-title{
   font-size:15px;
-  font-weight:800;
+  font-weight:900;
   color:#111;
 }
 .ios-msg{
   font-size:12px;
   color:#555;
   margin-top:6px;
+  line-height:1.35;
 }
 
-.ios-inputWrap{padding:0 14px 10px}
+.ios-inputWrap{padding:0 14px 12px}
 .ios-input{
   width:100%;
-  padding:10px;
-  border-radius:10px;
+  padding:10px 12px;
+  border-radius:12px;
   border:1px solid var(--line);
   font-size:13px;
 }
@@ -245,116 +290,69 @@ hr.sep{
 }
 .ios-btn{
   flex:1;
-  padding:12px 8px;
+  padding:12px 10px;
   font-size:13px;
-  font-weight:700;
+  font-weight:800;
   background:none;
   border:0;
+  cursor:pointer;
 }
 .ios-btn + .ios-btn{border-left:1px solid var(--line)}
 .ios-ok{color:var(--primary)}
 .ios-danger{color:var(--bad)}
 
 /* =========================
-   DESIGN FIX (mobile & rapi)
-   tempel di PALING BAWAH styles.css
+   MOBILE polish (tanpa bikin tombol jadi full width)
    ========================= */
-
-/* 1) Landing info list (yang dilingkari di landing) */
-.mini{
-  display:grid;
-  gap:10px;
-  margin-top:12px;
-}
-
-.mini > div{
-  display:grid;
-  grid-template-columns: 74px 1fr;
-  gap:10px;
-  align-items:center;
-  padding:8px 10px;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background: #F9FBFD;
-}
-
-.mini .badge{
-  justify-content:center;
-  width:100%;
-  background: var(--btn2);
-  color: var(--primary);
-  border-color: var(--line);
-  font-weight:800;
-}
-
-/* 2) Form rapih: input + tombol lebih enak di mobile */
-.row{
-  width:100%;
-}
-
-.row > .input{
-  flex:1;
-  min-width: 220px;
-}
-
-.row > .btn{
-  white-space:nowrap;
-}
-
-/* default: tombol primary biar konsisten tinggi */
-.btn{
-  line-height: 1;
-}
-
-/* Mobile: tombol jadi full width biar ga “nanggung” (Cari / Kirim Redeem) */
 @media (max-width: 520px){
-  .row{
-    flex-direction:column;
-    align-items:stretch;
-  }
-  .row > .btn,
-  .row > .input{
+
+  /* spacing card di hp biar nggak mepet */
+  .card{ padding:14px; }
+  .subcard{ padding:12px; }
+
+  /* jarak antar elemen di dalam card */
+  .row{ gap:10px; }
+
+  /* form: input tetap full, tombol tetap normal (kecuali button utama tertentu) */
+  .input{ padding:11px 12px; border-radius:14px; }
+
+  /* tombol utama tertentu kita bikin full biar rapi (Cari / Kirim Permintaan / Kirim Redeem) */
+  #search,
+  #submit,
+  #sendRedeem{
     width:100%;
-    min-width: 0;
+    justify-content:center;
+    padding:11px 12px;
+    border-radius:14px;
+  }
+
+  /* tombol "Kembali" yang secondary juga enak full */
+  #back,
+  #logout{
+    width:100%;
+    justify-content:center;
+  }
+
+  /* badges di member card jangan “kepanjangan” */
+  .badge{ padding:6px 10px; }
+
+  /* mini list landing tetap rapi */
+  .mini > div{
+    padding:10px 12px;
+    border-radius:14px;
+  }
+
+  /* redeem preview / msg box kalau ada */
+  #redeemPreview,
+  #redeemMsg{
+    margin-top:10px;
   }
 }
 
-/* 3) Redeem panel (yang dilingkari di member) */
-#memberTabContent .subcard{
-  border-radius:14px;
-}
-
-/* rapihin teks + jarak di redeem */
-#memberTabContent .subcard h3{
-  margin-bottom:6px;
-}
-
-#redeemPoints{
-  margin-top:2px;
-}
-
-/* tombol redeem full dan rapi */
-#sendRedeem{
-  width:100%;
+/* kalau ada elemen pesan redeem yang kamu jadikan box (opsional, aman walau id gak ada) */
+#redeemMsg{
   padding:10px 12px;
-  font-size:12px;
   border-radius:12px;
-}
-
-/* preview text biar keliatan “card note”, nggak ngegantung */
-#redeemPreview{
-  margin-top:10px !important;
-  padding:8px 10px;
   border:1px dashed var(--line);
-  border-radius:12px;
   background:#fff;
-}
-
-/* 4) Tabs biar ga kepotong & wrap cantik */
-.tabs{
-  flex-wrap:wrap;
-}
-
-.tab{
-  flex:0 0 auto;
 }
