@@ -347,7 +347,7 @@ function renderPublicRegister() {
       <input class="input" id="name" placeholder="Contoh: Aly" />
 
       <label>Username Telegram</label>
-      <input class="input" id="tg" placeholder="Username wajib sama dengan yang digunakan untuk start bot @topupgamesbot" />
+      <input class="input" id="tg" placeholder="Username yang digunakan untuk start @topupgamesbot" />
 
       <div class="row">
         <button class="btn" id="submit">Ajukan Pendaftaran</button>
@@ -373,7 +373,7 @@ function renderPublicRegister() {
         status: "pending",
         createdAt: serverTimestamp()
       });
-      $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan admin.";
+      $msg.textContent = "✅ Permintaan terkirim. Tunggu persetujuan owner.";
       document.getElementById("submit").disabled = true;
     } catch (e) {
       $msg.textContent = "❌ Gagal mengirim.";
@@ -387,7 +387,7 @@ function renderPublicLookup() {
       <div class="row space">
         <div>
           <h2>Masuk</h2>
-          <p class="muted">Masukkan kode membership (member code) untuk melihat kartu member.</p>
+          <p class="muted">Masukkan ID membership (member code) untuk melihat kartu member.</p>
         </div>
         <button class="btn secondary" id="back">Kembali</button>
       </div>
@@ -410,7 +410,7 @@ function renderPublicLookup() {
     if (!code) { $msg.textContent = "Mohon isi kode."; return; }
 
     const snap = await getDoc(doc(db, "membersPublic", code));
-    if (!snap.exists()) { $msg.textContent = "❌ Kode tidak ditemukan / belum aktif. Silahkan Daftar terlebih dahulu."; return; }
+    if (!snap.exists()) { $msg.textContent = "❌ Kode/ID tidak ditemukan, atau belum aktif. Silahkan Daftar terlebih dahulu."; return; }
 
     state.memberCode = code;
     state.member = snap.data();
@@ -613,7 +613,7 @@ async function renderMemberTab() {
   // vouchers tab
   const vouchers = Array.isArray(m.vouchers) ? m.vouchers : [];
   if (vouchers.length === 0) {
-    wrap.innerHTML = `<p class="muted">Belum ada voucher. Setelah admin ACC, voucher akan muncul di sini.</p>`;
+    wrap.innerHTML = `<p class="muted">Belum ada voucher. Reedem poin untuk mendapatkan voucher.</p>`;
     return;
   }
 
